@@ -24,6 +24,48 @@ enum UserStatus {
   DISABLED
 }
 
+enum Purpose {
+  RESET_PASSWORD
+  VERIFY_EMAIL
+  TRANSFER
+}
+
+enum TransactionCode {
+  FOOD
+  SHOPPING
+  TRANSPORT
+  BILLS
+  ENTERTAINMENT
+  OTHER
+}
+
+enum TransactionType {
+  TRANSFER
+  DEPOSIT
+  WITHDRAW
+  PAYMENT
+  SAVINGS_DEPOSIT
+  SAVINGS_WITHDRAW
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum AccountStatus {
+  ACTIVE
+  LOCKED
+  CLOSED
+}
+
+enum AccountType {
+  PAYMENT
+  SAVINGS
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique @db.VarChar(255)
@@ -33,7 +75,9 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  customer Customer?
+  customer      Customer?
+  authOtps      AuthOtps[]
+  refreshTokens RefreshTokens[]
 
   @@map("users")
 }
@@ -47,7 +91,114 @@ model Customer {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  user          User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  accounts      Accounts[]
+  beneficiaries Beneficiaries[]
+
+  @@map("customer")
+}
+
+model AuthOtps {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  otpHash   String   @map("otp_hash") @db.VarChar(255)
+  purpose   Purpose
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  @@map("customers")
+  @@index([userId])
+  @@map("auth_otps")
+}
+
+model RefreshTokens {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Accounts {
+  id            String        @id @default(uuid()) @db.Uuid
+  customerId    String        @map("customer_id") @db.Uuid
+  accountNumber String        @unique @map("account_number") @db.VarChar(30)
+  accountType   AccountType   @map("account_type")
+  balance       BigInt        @default(0)
+  currency      String        @default("VND") @db.VarChar(3)
+  status        AccountStatus @default(ACTIVE)
+  isDefault     Boolean       @default(false) @map("is_default")
+  openedAt      DateTime      @default(now()) @map("opened_at") @db.Timestamptz(3)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  transactionSender   Transactions[] @relation("SenderTransactions")
+  transactionReceiver Transactions[] @relation("ReceiverTransactions")
+
+  @@index([customerId])
+  @@map("accounts")
+}
+
+model TransactionCategories {
+  id        String          @id @default(uuid()) @db.Uuid
+  name      String          @unique @db.VarChar(50)
+  code      TransactionCode @unique
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  transactions Transactions[]
+
+  @@map("transaction_categories")
+}
+
+model Transactions {
+  id              String            @id @default(uuid()) @db.Uuid
+  fromAccountId   String?           @map("from_account_id") @db.Uuid
+  toAccountId     String?           @map("to_account_id") @db.Uuid
+  categoryId      String?           @map("category_id") @db.Uuid
+  transactionType TransactionType   @map("transaction_type")
+  amount          BigInt
+  currency        String            @default("VND") @db.VarChar(3)
+  status          TransactionStatus @default(PENDING)
+  description     String?           @db.VarChar(255)
+  referenceCode   String            @unique @map("reference_code") @db.VarChar(50)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt     DateTime?         @map("completed_at") @db.Timestamptz(3)
+
+  transactionSender   Accounts?              @relation("SenderTransactions", fields: [fromAccountId], references: [id], onDelete: Restrict)
+  transactionReceiver Accounts?              @relation("ReceiverTransactions", fields: [toAccountId], references: [id], onDelete: Restrict)
+  transactionCategory TransactionCategories? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([fromAccountId, createdAt])
+  @@index([toAccountId, createdAt])
+  @@index([categoryId])
+  @@index([status, createdAt])
+  @@map("transactions")
+}
+
+model Beneficiaries {
+  id            String   @id @default(uuid()) @db.Uuid
+  customerId    String   @map("customer_id") @db.Uuid
+  bankCode      String   @map("bank_code") @db.VarChar(20)
+  bankName      String   @map("bank_name") @db.VarChar(100)
+  accountNumber String   @map("account_number") @db.VarChar(30)
+  accountName   String   @map("account_name") @db.VarChar(100)
+  nickname      String   @db.VarChar(100)
+  isInternal    Boolean  @default(false) @map("is_internal")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@unique([customerId, bankCode, accountNumber])
+  @@map("beneficiaries")
 }
