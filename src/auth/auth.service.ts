@@ -125,4 +125,30 @@ export class AuthService {
       },
     };
   }
+
+  async getCurrentUser(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        customer: {
+          select: {
+            id: true,
+            fullName: true,
+            phone: true,
+            dateOfBirth: true,
+          },
+        },
+      },
+    });
+
+    if (!user || user.status !== 'ACTIVE') {
+      throw new ForbiddenException('Tài khoản của bạn đã bị vô hiệu hóa');
+    }
+
+    return user;
+  }
 }
