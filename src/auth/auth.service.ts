@@ -10,12 +10,15 @@ import { PrismaService } from '../database/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
+import { createHash, randomBytes } from 'node:crypto';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -106,9 +109,23 @@ export class AuthService {
     const payload = { sub: user.id, email: user.email, role: user.role };
     const accessToken = await this.jwtService.signAsync(payload);
 
+    const refreshToken = this.generateRefreshToken();
+    const refreshTokenHash = this.hashRefreshToken(refreshToken);
+
+    const refreshTokenExpiresAt = this.getRefreshTokenExpiresAt();
+
+    await this.prisma.refreshTokens.create({
+      data: {
+        userId: user.id,
+        tokenHash: refreshTokenHash,
+        expiresAt: refreshTokenExpiresAt,
+      },
+    });
+
     return {
       accessToken,
-      expiresIn: 900,
+      refreshToken,
+      refreshTokenExpiresAt,
       user: {
         id: user.id,
         email: user.email,
@@ -150,5 +167,83 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  async refresh(rawRefreshToken: string) {
+    const currentTokenHash = this.hashRefreshToken(rawRefreshToken);
+
+    const now = new Date();
+
+    const storedToken = await this.prisma.refreshTokens.findUnique({
+      where: { tokenHash: currentTokenHash },
+      include: { user: true },
+    });
+
+    if (
+      !storedToken ||
+      storedToken.revokedAt !== null ||
+      storedToken.expiresAt <= now ||
+      storedToken.user.status !== 'ACTIVE'
+    ) {
+      throw new UnauthorizedException('Refresh token is invalid or expired');
+    }
+
+    const newRefreshToken = this.generateRefreshToken();
+    const newTokenHash = this.hashRefreshToken(newRefreshToken);
+
+    const payload = {
+      sub: storedToken.user.id,
+      email: storedToken.user.email,
+      role: storedToken.user.role,
+    };
+    const newAccessToken = await this.jwtService.signAsync(payload);
+
+    const rotationResult = await this.prisma.refreshTokens.updateMany({
+      where: {
+        id: storedToken.id,
+        tokenHash: currentTokenHash,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: {
+        tokenHash: newTokenHash,
+        lastUsedAt: now,
+      },
+    });
+
+    if (rotationResult.count !== 1) {
+      throw new UnauthorizedException('Failed to refresh token');
+    }
+
+    return {
+      accessToken: newAccessToken,
+      expiresAt: this.getAccessTokenTtlSeconds(),
+
+      newRefreshToken,
+      refreshTokenExpiresAt: storedToken.expiresAt, // Keep the original expiration date for the new token
+    };
+  }
+
+  private generateRefreshToken(): string {
+    return randomBytes(48).toString('base64url');
+  }
+
+  private hashRefreshToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private getRefreshTokenExpiresAt(): Date {
+    const ttlDays =
+      Number(this.configService.get('REFRESH_TOKEN_TTL_DAYS')) || 7;
+
+    if (!Number.isFinite(ttlDays) || ttlDays <= 0) {
+      throw new Error('REFRESH_TOKEN_TTL_DAYS must be a positive number');
+    }
+
+    return new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000); // Convert days to milliseconds
+  }
+
+  private getAccessTokenTtlSeconds(): number {
+    return Number(this.configService.get('JWT_ACCESS_TTL_SECONDS')) || 900; // Default to 15 minutes
   }
 }
