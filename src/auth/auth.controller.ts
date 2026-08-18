@@ -75,6 +75,15 @@ export class AuthController {
     });
   }
 
+  private clearRefreshTokenCookie(response: Response): void {
+    response.clearCookie(REFRESH_TOKEN_COOKIE, {
+      httpOnly: true,
+      secure: this.configService.get('NODE_ENV') === 'production',
+      sameSite: 'lax',
+      path: REFRESH_TOKEN_COOKIE_PATH,
+    });
+  }
+
   @HttpCode(HttpStatus.OK)
   @Post('refresh')
   async refresh(
@@ -101,5 +110,20 @@ export class AuthController {
     ]);
 
     return responseBody;
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(
+    @Req() request: CookieRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const refreshToken = request.cookies[REFRESH_TOKEN_COOKIE];
+
+    if (typeof refreshToken === 'string') {
+      await this.authService.logout(refreshToken);
+    }
+
+    this.clearRefreshTokenCookie(response);
   }
 }

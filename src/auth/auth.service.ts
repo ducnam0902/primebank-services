@@ -246,4 +246,18 @@ export class AuthService {
   private getAccessTokenTtlSeconds(): number {
     return Number(this.configService.get('JWT_ACCESS_TTL_SECONDS')) || 900; // Default to 15 minutes
   }
+
+  async logout(rawRefreshToken: string): Promise<void> {
+    const tokenHash = this.hashRefreshToken(rawRefreshToken);
+
+    await this.prisma.refreshTokens.updateMany({
+      where: {
+        tokenHash,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+  }
 }
