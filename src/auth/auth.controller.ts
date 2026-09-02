@@ -23,6 +23,8 @@ import {
   REFRESH_TOKEN_COOKIE_PATH,
 } from './constants/auth.constants';
 import type { CookieRequest } from './types/cookie-request.type';
+import { VerifyEmailDto } from './dto/verifyEmail.dto';
+import { ResendVerificationDto } from './dto/resendVerification.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -125,5 +127,16 @@ export class AuthController {
     }
 
     this.clearRefreshTokenCookie(response);
+  }
+
+  @Post('verify-email')
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  async resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto);
   }
 }
