@@ -27,7 +27,6 @@ enum UserStatus {
 enum Purpose {
   RESET_PASSWORD
   VERIFY_EMAIL
-  TRANSFER
 }
 
 enum TransactionCode {
@@ -67,17 +66,17 @@ enum AccountType {
 }
 
 model User {
-  id           String     @id @default(uuid()) @db.Uuid
-  email        String     @unique @db.VarChar(255)
-  passwordHash String     @map("password_hash") @db.VarChar(255)
-  role         UserRole   @default(CUSTOMER)
-  status       UserStatus @default(ACTIVE)
-  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  customer      Customer?
-  authOtps      AuthOtps[]
-  refreshTokens RefreshTokens[]
+  id              String          @id @default(uuid()) @db.Uuid
+  email           String          @unique @db.VarChar(255)
+  passwordHash    String          @map("password_hash") @db.VarChar(255)
+  role            UserRole        @default(CUSTOMER)
+  status          UserStatus      @default(ACTIVE)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  emailVerifiedAt DateTime?       @map("email_verified_at") @db.Timestamptz(3)
+  customer        Customer?
+  authOtps        AuthOtps[]
+  refreshTokens   RefreshTokens[]
 
   @@map("users")
 }
@@ -99,31 +98,37 @@ model Customer {
 }
 
 model AuthOtps {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  otpHash   String   @map("otp_hash") @db.VarChar(255)
-  purpose   Purpose
-  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  otpHash       String    @map("otp_hash") @db.VarChar(255)
+  purpose       Purpose
+  attemptCount  Int       @default(0) @map("attempt_count")
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt    DateTime? @map("consumed_at") @db.Timestamptz(3)
+  invalidatedAt DateTime? @map("invalidated_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  @@index([userId])
+  @@index([userId, purpose])
   @@map("auth_otps")
 }
 
 model RefreshTokens {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
-  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
-  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.Char(64)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(3)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
   @@map("refresh_tokens")
 }
 
