@@ -1,6 +1,7 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, ServiceUnavailableException, Inject } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { Resend } from 'resend';
+import { mailConfig } from '../config';
 
 interface SendVerificationCodeParams {
   email: string;
@@ -14,12 +15,13 @@ export class EmailService {
   private readonly resend: Resend;
   private readonly from: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(@Inject(mailConfig.KEY)
+  private readonly mailCfg: ConfigType<typeof mailConfig>) {
     this.resend = new Resend(
-      this.configService.getOrThrow<string>('RESEND_API_KEY'),
+      this.mailCfg.apiKey
     );
 
-    this.from = this.configService.getOrThrow<string>('EMAIL_FROM');
+    this.from = this.mailCfg.from || ''
   }
 
   async sendVerificationCode({

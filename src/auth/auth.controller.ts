@@ -9,6 +9,7 @@ import {
   UseGuards,
   Res,
   UnauthorizedException,
+  Inject
 } from '@nestjs/common';
 import omit from 'lodash/omit';
 import type { Response } from 'express';
@@ -17,7 +18,6 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import type { AuthenticatedRequest } from './types/authenticated-request.type';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { ConfigService } from '@nestjs/config';
 import {
   REFRESH_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE_PATH,
@@ -25,13 +25,16 @@ import {
 import type { CookieRequest } from './types/cookie-request.type';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
 import { ResendVerificationDto } from './dto/resendVerification.dto';
+import { appConfig } from '../config';
+import type { ConfigType } from '@nestjs/config';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly configService: ConfigService,
-  ) {}
+    @Inject(appConfig.KEY)
+    private readonly appCfg: ConfigType<typeof appConfig>,
+  ) { }
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
@@ -70,7 +73,7 @@ export class AuthController {
   ): void {
     response.cookie(REFRESH_TOKEN_COOKIE, token, {
       httpOnly: true,
-      secure: this.configService.get('NODE_ENV') === 'production',
+      secure:  this.appCfg.env === 'production',
       sameSite: 'lax',
       path: REFRESH_TOKEN_COOKIE_PATH,
       expires: expiresAt,
@@ -80,7 +83,7 @@ export class AuthController {
   private clearRefreshTokenCookie(response: Response): void {
     response.clearCookie(REFRESH_TOKEN_COOKIE, {
       httpOnly: true,
-      secure: this.configService.get('NODE_ENV') === 'production',
+      secure: this.appCfg.env === 'production',
       sameSite: 'lax',
       path: REFRESH_TOKEN_COOKIE_PATH,
     });

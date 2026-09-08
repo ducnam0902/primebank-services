@@ -8,6 +8,7 @@ import {
   BadRequestException,
   HttpException,
   HttpStatus,
+  Inject,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { Prisma, Purpose } from '../generated/prisma/client';
@@ -16,18 +17,21 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes } from 'node:crypto';
-import { ConfigService } from '@nestjs/config';
+
 import repeat from 'lodash/repeat';
 import { EmailService } from '../email/email.service';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
 import { ResendVerificationDto } from './dto/resendVerification.dto';
+import { jwtConfig } from '../config';
+import type { ConfigType } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
+    @Inject(jwtConfig.KEY)
+    private readonly jwtCfg: ConfigType<typeof jwtConfig>,
     private readonly emailService: EmailService,
   ) {}
 
@@ -302,7 +306,7 @@ export class AuthService {
 
   private getRefreshTokenExpiresAt(): Date {
     const ttlDays =
-      Number(this.configService.get('REFRESH_TOKEN_TTL_DAYS')) || 7;
+      Number(this.jwtCfg.refreshExpiresIn) || 7;
 
     if (!Number.isFinite(ttlDays) || ttlDays <= 0) {
       throw new Error('REFRESH_TOKEN_TTL_DAYS must be a positive number');
@@ -312,7 +316,7 @@ export class AuthService {
   }
 
   private getAccessTokenTtlSeconds(): number {
-    return Number(this.configService.get('JWT_ACCESS_TTL_SECONDS')) || 900; // Default to 15 minutes
+    return Number(this.jwtCfg.accessExpiresIn) || 900; // Default to 15 minutes
   }
 
   async logout(rawRefreshToken: string): Promise<void> {
@@ -331,7 +335,7 @@ export class AuthService {
 
   async verifyEmail(dto: VerifyEmailDto) {
     const { verificationId, code } = dto;
-    const maxAttempts: number = this.configService.get('MAX_ATTEMPTS') || 5;
+    const maxAttempts: number = this.jwtCfg.maxAttempts || 5;
     const existingVerification = await this.prisma.authOtps.findUnique({
       where: {
         id: verificationId,
