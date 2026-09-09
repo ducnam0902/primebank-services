@@ -5,8 +5,18 @@ import {
   NestInterceptor,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Response } from 'express';
 import { Observable, map } from 'rxjs';
 import { SKIP_TRANSFORM_KEY } from '../decorators/skip-transform.decorator';
+
+interface PaginatedPayload {
+  data: unknown;
+  meta: unknown;
+}
+
+function isPaginated(p: unknown): p is PaginatedPayload {
+  return typeof p === 'object' && p !== null && 'data' in p && 'meta' in p;
+}
 
 @Injectable()
 export class TransformResponseInterceptor<T> implements NestInterceptor<
@@ -23,19 +33,15 @@ export class TransformResponseInterceptor<T> implements NestInterceptor<
     if (skip) return next.handle();
 
     const response = context.switchToHttp().getResponse<Response>();
-
+    const statusCode = response.statusCode;
     return next.handle().pipe(
-      map((payload) => {
-        const isPaginated: boolean  =
-          payload &&
-          typeof payload === 'object' &&
-          'data' in payload &&
-          'meta' in payload;
+      map((payload: unknown) => {
+        const paginated = isPaginated(payload);
         return {
           success: true,
-          statusCode: response.status,
-          data: isPaginated ? payload.data : payload,
-          ...(isPaginated ? { meta: payload.meta } : {}),
+          statusCode: statusCode,
+          data: paginated ? payload.data : payload,
+          ...(paginated ? { meta: payload.meta } : {}),
           timestamp: new Date().toISOString(),
         };
       }),

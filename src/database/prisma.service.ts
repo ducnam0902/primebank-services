@@ -8,7 +8,7 @@ import {
 
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/client';
-import { databaseConfig } from '../config';
+import { appConfig, databaseConfig } from '../config';
 import type { ConfigType } from '@nestjs/config';
 @Injectable()
 export class PrismaService
@@ -19,6 +19,8 @@ export class PrismaService
   constructor(
     @Inject(databaseConfig.KEY)
     private readonly databaseCfg: ConfigType<typeof databaseConfig>,
+    @Inject(appConfig.KEY)
+    private readonly appCfg: ConfigType<typeof appConfig>,
   ) {
     const adapter = new PrismaPg({
       connectionString: databaseCfg.url,
@@ -27,7 +29,7 @@ export class PrismaService
     super({
       adapter,
       log:
-        process.env.NODE_ENV === 'development'
+        appCfg.env === 'development'
           ? ['query', 'warn', 'error']
           : ['warn', 'error'],
       errorFormat: 'minimal',
@@ -36,9 +38,11 @@ export class PrismaService
 
   async onModuleInit() {
     await this.$connect();
+    this.logger.log('Database connected');
   }
 
   async onModuleDestroy() {
     await this.$disconnect();
+    this.logger.log('Database disconnected');
   }
 }

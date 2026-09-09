@@ -13,7 +13,6 @@ import {
   validationSchema,
 } from './config';
 import { DatabaseModule } from './database/database.module';
-import { PrismaService } from './database/prisma.service';
 import { EmailModule } from './email/email.module';
 
 @Module({
@@ -36,7 +35,6 @@ import { EmailModule } from './email/email.module';
   ],
   controllers: [AppController],
   providers: [
-    PrismaService,
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: TransformResponseInterceptor },
   ],

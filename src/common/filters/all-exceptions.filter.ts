@@ -14,6 +14,13 @@ import {
   PrismaKnownError,
 } from '../utils/prisma-error.util';
 
+export interface ParsedException {
+  statusCode: number;
+  message: string;
+  errorCode: string;
+  details?: unknown;
+}
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
@@ -39,13 +46,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
     response.status(statusCode).json(body);
   }
 
-  private parse(exception: unknown) {
+  private parse(exception: unknown): ParsedException {
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const res = exception.getResponse();
 
       if (typeof res === 'object' && res !== null) {
-        const r = res as Record<string, any>;
+        const r = res as Record<string, unknown>;
 
         if (Array.isArray(r.message)) {
           return {
@@ -58,8 +65,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
         return {
           statusCode: status,
-          errorCode: r.errorCode || this.mapHttpStatus(status),
-          message: r.message || exception.message || 'An error occurred',
+          errorCode:
+            typeof r.errorCode === 'string'
+              ? r.errorCode
+              : this.mapHttpStatus(status),
+          message:
+            typeof r.message === 'string'
+              ? r.message
+              : exception.message || 'An error occurred',
           details: r.details,
         };
       }
@@ -111,8 +124,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private mapHttpStatus(status: number): string {
-    if (status === HttpStatus.UNAUTHORIZED) return ErrorCode.UNAUTHORIZED;
-    if (status === HttpStatus.NOT_FOUND) return ErrorCode.RESOURCE_NOT_FOUND;
+    if (status === Number(HttpStatus.UNAUTHORIZED))
+      return ErrorCode.UNAUTHORIZED;
+    if (status === Number(HttpStatus.NOT_FOUND))
+      return ErrorCode.RESOURCE_NOT_FOUND;
     return ErrorCode.INTERNAL_ERROR;
   }
 
