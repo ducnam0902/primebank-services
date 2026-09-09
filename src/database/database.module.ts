@@ -4,10 +4,8 @@ import { databaseConfig } from '../config';
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [
-    ConfigModule.forFeature(databaseConfig)
-  ],
+  imports: [ConfigModule.forFeature(databaseConfig)],
   providers: [PrismaService],
   exports: [PrismaService],
 })
-export class DatabaseModule { }
+export class DatabaseModule {}

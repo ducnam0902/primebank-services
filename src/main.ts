@@ -8,18 +8,16 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
-  const corsOptions = configService
-    .getOrThrow<string[]>('app.allowedOrigins')
+  const corsOptions = configService.getOrThrow<string[]>('app.allowedOrigins');
 
   app.setGlobalPrefix(configService.getOrThrow<string>('app.apiPrefix'));
-  app.use(cookieParser());
 
   app.enableCors({
     origin: corsOptions,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   });
-
+  app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -31,7 +29,6 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AllExceptionsFilter());
 
-
   const port = Number(configService.getOrThrow('app.port'));
 
   await app.listen(port);
@@ -39,7 +36,7 @@ async function bootstrap() {
   console.log(`Application is running on: ${await app.getUrl()}`);
 }
 
-void bootstrap().catch(err => {
+void bootstrap().catch((err) => {
   console.error('Error during application bootstrap:', err);
   process.exit(1);
 });

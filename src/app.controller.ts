@@ -3,9 +3,7 @@ import { PrismaService } from './database/prisma.service';
 
 @Controller()
 export class AppController {
-  constructor(
-    private readonly prisma: PrismaService,
-  ) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   @Get('/health/database')
   async getHealth(): Promise<object> {

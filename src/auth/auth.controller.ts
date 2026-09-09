@@ -9,7 +9,7 @@ import {
   UseGuards,
   Res,
   UnauthorizedException,
-  Inject
+  Inject,
 } from '@nestjs/common';
 import omit from 'lodash/omit';
 import type { Response } from 'express';
@@ -34,7 +34,7 @@ export class AuthController {
     private readonly authService: AuthService,
     @Inject(appConfig.KEY)
     private readonly appCfg: ConfigType<typeof appConfig>,
-  ) { }
+  ) {}
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
@@ -73,7 +73,7 @@ export class AuthController {
   ): void {
     response.cookie(REFRESH_TOKEN_COOKIE, token, {
       httpOnly: true,
-      secure:  this.appCfg.env === 'production',
+      secure: this.appCfg.env === 'production',
       sameSite: 'lax',
       path: REFRESH_TOKEN_COOKIE_PATH,
       expires: expiresAt,
