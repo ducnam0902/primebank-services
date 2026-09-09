@@ -1,8 +1,8 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from "@nestjs/common";
 import { Request, Response } from 'express';
-import { ErrorResponse } from "../interface/error-response.interface";
+import { ErrorResponse } from "../interfaces/error-response.interface";
 import { ErrorCode } from "../constants/error-codes.constant";
-import { isPrismaKnownError, PrismaKnownError } from "../utils/prisma-error.utils";
+import { isPrismaKnownError, PrismaKnownError } from "../utils/prisma-error.util";
 
 
 

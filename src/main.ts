@@ -12,11 +12,12 @@ async function bootstrap() {
     .getOrThrow<string[]>('app.allowedOrigins')
 
   app.setGlobalPrefix(configService.getOrThrow<string>('app.apiPrefix'));
+  app.use(cookieParser());
 
   app.enableCors({
     origin: corsOptions,
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   });
 
   app.useGlobalPipes(
@@ -28,15 +29,17 @@ async function bootstrap() {
     }),
   );
 
-    app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalFilters(new AllExceptionsFilter());
 
-  app.use(cookieParser());
 
-  const port = Number(configService.get('app.port') ?? 3000);
+  const port = Number(configService.getOrThrow('app.port'));
 
   await app.listen(port);
 
   console.log(`Application is running on: ${await app.getUrl()}`);
 }
 
-void bootstrap();
+void bootstrap().catch(err => {
+  console.error('Error during application bootstrap:', err);
+  process.exit(1);
+});
