@@ -7,6 +7,9 @@ import { ConfigModule, ConfigType } from '@nestjs/config';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { EmailModule } from '../email/email.module';
 import { jwtConfig } from '../config';
+import { RolesGuard } from './guards/roles.guard';
+import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
+import { TransformResponseInterceptor } from '@/common/interceptors/transform-response.interceptor';
 
 @Module({
   imports: [
@@ -25,6 +28,12 @@ import { jwtConfig } from '../config';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard],
+  providers: [
+    AuthService,
+    { provide: 'APP_FILTER', useClass: AllExceptionsFilter },
+    { provide: 'APP_INTERCEPTOR', useClass: TransformResponseInterceptor },
+    { provide: 'APP_GUARD', useClass: JwtAuthGuard }, // chạy trước
+    { provide: 'APP_GUARD', useClass: RolesGuard }, // chạy sau],
+  ],
 })
 export class AuthModule {}

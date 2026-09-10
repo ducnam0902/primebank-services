@@ -305,8 +305,7 @@ export class AuthService {
   }
 
   private getRefreshTokenExpiresAt(): Date {
-    const ttlDays =
-      Number(this.jwtCfg.refreshExpiresIn) || 7;
+    const ttlDays = Number(this.jwtCfg.refreshExpiresIn) || 7;
 
     if (!Number.isFinite(ttlDays) || ttlDays <= 0) {
       throw new Error('REFRESH_TOKEN_TTL_DAYS must be a positive number');
