@@ -21,11 +21,11 @@ function isPaginated(p: unknown): p is PaginatedPayload {
 @Injectable()
 export class TransformResponseInterceptor<T> implements NestInterceptor<
   T,
-  any
+  unknown
 > {
   constructor(private readonly reflector: Reflector) {}
 
-  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const skip = this.reflector.getAllAndOverride<boolean>(SKIP_TRANSFORM_KEY, [
       context.getHandler(),
       context.getClass(),

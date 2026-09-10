@@ -97,7 +97,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     };
   }
 
-  private parsePrisma(e: PrismaKnownError) {
+  private parsePrisma(e: PrismaKnownError): ParsedException {
     switch (e.code) {
       case 'P2002': // unique constraint
         return {
