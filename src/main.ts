@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
@@ -10,6 +11,7 @@ async function bootstrap(): Promise<void> {
   const configService = app.get(ConfigService);
   const corsOptions = configService.getOrThrow<string[]>('app.allowedOrigins');
 
+  app.use(helmet());
   app.setGlobalPrefix(configService.getOrThrow<string>('app.apiPrefix'));
 
   app.enableCors({
@@ -28,7 +30,7 @@ async function bootstrap(): Promise<void> {
   );
 
   app.useGlobalFilters(new AllExceptionsFilter());
-
+  app.enableShutdownHooks();
   const port = Number(configService.getOrThrow('app.port'));
 
   await app.listen(port);
