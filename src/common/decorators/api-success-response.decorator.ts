@@ -16,6 +16,17 @@ export const ApiSuccessResponse = <TModel extends Type<unknown>>(
           data: isArray
             ? { type: 'array', items: { $ref: getSchemaPath(model) } }
             : { $ref: getSchemaPath(model) },
+          meta: {
+            type: 'object',
+            properties: {
+              page: { type: 'number', example: 1 },
+              limit: { type: 'number', example: 20 },
+              total: { type: 'number', example: 137 },
+              totalPages: { type: 'number', example: 7 },
+              hasNextPage: { type: 'boolean', example: true },
+              hasPreviousPage: { type: 'boolean', example: false },
+            },
+          },
           timestamp: { type: 'string', format: 'date-time' },
         },
       },
