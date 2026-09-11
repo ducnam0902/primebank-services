@@ -22,7 +22,7 @@ import repeat from 'lodash/repeat';
 import { EmailService } from '../email/email.service';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
 import { ResendVerificationDto } from './dto/resendVerification.dto';
-import { jwtConfig } from '../config';
+import { jwtConfig, throttleConfig } from '../config';
 import type { ConfigType } from '@nestjs/config';
 
 @Injectable()
@@ -32,6 +32,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     @Inject(jwtConfig.KEY)
     private readonly jwtCfg: ConfigType<typeof jwtConfig>,
+    @Inject(throttleConfig.KEY)
+    private readonly throttCfg: ConfigType<typeof throttleConfig>,
     private readonly emailService: EmailService,
   ) {}
 
@@ -334,7 +336,7 @@ export class AuthService {
 
   async verifyEmail(dto: VerifyEmailDto) {
     const { verificationId, code } = dto;
-    const maxAttempts: number = this.jwtCfg.maxAttempts || 5;
+    const maxAttempts: number = this.throttCfg.maxAttempts || 5;
     const existingVerification = await this.prisma.authOtps.findUnique({
       where: {
         id: verificationId,

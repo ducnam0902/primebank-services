@@ -6,7 +6,7 @@ import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
 import { ConfigModule, ConfigType } from '@nestjs/config';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { EmailModule } from '../email/email.module';
-import { jwtConfig } from '../config';
+import { jwtConfig, throttleConfig } from '../config';
 import { RolesGuard } from './guards/roles.guard';
 import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
 import { TransformResponseInterceptor } from '@/common/interceptors/transform-response.interceptor';
@@ -16,6 +16,7 @@ import { TransformResponseInterceptor } from '@/common/interceptors/transform-re
     DatabaseModule,
     EmailModule,
     ConfigModule.forFeature(jwtConfig),
+    ConfigModule.forFeature(throttleConfig),
     JwtModule.registerAsync({
       imports: [ConfigModule.forFeature(jwtConfig)],
       inject: [jwtConfig.KEY],

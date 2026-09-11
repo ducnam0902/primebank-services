@@ -128,6 +128,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return ErrorCode.UNAUTHORIZED;
     if (status === Number(HttpStatus.NOT_FOUND))
       return ErrorCode.RESOURCE_NOT_FOUND;
+    if (status === Number(HttpStatus.TOO_MANY_REQUESTS))
+      return ErrorCode.TOO_MANY_REQUESTS;
     return ErrorCode.INTERNAL_ERROR;
   }
 
