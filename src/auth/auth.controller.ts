@@ -27,6 +27,7 @@ import { VerifyEmailDto } from './dto/verifyEmail.dto';
 import { ResendVerificationDto } from './dto/resendVerification.dto';
 import { appConfig } from '../config';
 import type { ConfigType } from '@nestjs/config';
+import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 @Controller('auth')
 export class AuthController {
@@ -43,6 +44,9 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Đăng nhập bằng email và mật khẩu' })
+  @ApiResponse({ status: 200, description: 'Đăng nhập thành công' })
+  @ApiResponse({ status: 401, description: 'Sai email hoặc mật khẩu' })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,

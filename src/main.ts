@@ -5,15 +5,25 @@ import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { setupSwagger } from '@/common/swagger/swagger.setup';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
   const corsOptions = configService.getOrThrow<string[]>('app.allowedOrigins');
-
-  app.use(helmet());
-  app.setGlobalPrefix(configService.getOrThrow<string>('app.apiPrefix'));
-
+  const apiPrefix = configService.getOrThrow<string>('app.apiPrefix');
+  app.use(
+    helmet({
+      contentSecurityPolicy:
+        configService.getOrThrow<string>('app.env') === 'production'
+          ? undefined
+          : false,
+    }),
+  );
+  app.setGlobalPrefix(apiPrefix);
+  if (configService.getOrThrow<string>('app.env') !== 'production') {
+    setupSwagger(app, apiPrefix);
+  }
   app.enableCors({
     origin: corsOptions,
     credentials: true,

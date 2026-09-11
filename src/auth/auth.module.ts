@@ -10,6 +10,8 @@ import { jwtConfig, throttleConfig } from '../config';
 import { RolesGuard } from './guards/roles.guard';
 import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
 import { TransformResponseInterceptor } from '@/common/interceptors/transform-response.interceptor';
+import { PassportModule } from '@nestjs/passport';
+import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
@@ -17,6 +19,7 @@ import { TransformResponseInterceptor } from '@/common/interceptors/transform-re
     EmailModule,
     ConfigModule.forFeature(jwtConfig),
     ConfigModule.forFeature(throttleConfig),
+    PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule.forFeature(jwtConfig)],
       inject: [jwtConfig.KEY],
@@ -31,6 +34,7 @@ import { TransformResponseInterceptor } from '@/common/interceptors/transform-re
   controllers: [AuthController],
   providers: [
     AuthService,
+    JwtStrategy,
     { provide: 'APP_FILTER', useClass: AllExceptionsFilter },
     { provide: 'APP_INTERCEPTOR', useClass: TransformResponseInterceptor },
     { provide: 'APP_GUARD', useClass: JwtAuthGuard }, // chạy trước
