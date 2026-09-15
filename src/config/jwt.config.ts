@@ -7,5 +7,4 @@ export default registerAs('jwt', () => ({
   refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
   verificationSecret: process.env.JWT_VERIFICATION_SECRET,
   verificationExpiresIn: process.env.JWT_VERIFICATION_EXPIRES_IN || '24h',
-  maxAttempts: Number(process.env.MAX_ATTEMPTS) || 5,
 }));

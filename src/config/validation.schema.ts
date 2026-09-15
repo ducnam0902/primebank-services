@@ -27,4 +27,10 @@ export const validationSchema = Joi.object({
 
   DATABASE_URL: Joi.string().required(),
   DIRECT_URL: Joi.string().required(),
+
+  THROTTLE_TTL: Joi.string().default(60_000),
+  THROTTLE_LIMIT: Joi.number().default(60),
+  THROTTLE_AUTH_LIMIT: Joi.number().default(5),
+  VERIFICATION_COOLDOWN_MS: Joi.string().default(60_000),
+  VERIFICATION_MAX_PER_DAY: Joi.number().default(5),
 });
