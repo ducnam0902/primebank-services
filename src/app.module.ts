@@ -17,6 +17,7 @@ import { DatabaseModule } from './database/database.module';
 import { EmailModule } from './email/email.module';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     DatabaseModule,
     AuthModule,
     EmailModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [

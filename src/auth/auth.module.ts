@@ -37,8 +37,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtStrategy,
     { provide: 'APP_FILTER', useClass: AllExceptionsFilter },
     { provide: 'APP_INTERCEPTOR', useClass: TransformResponseInterceptor },
-    { provide: 'APP_GUARD', useClass: JwtAuthGuard }, // chạy trước
-    { provide: 'APP_GUARD', useClass: RolesGuard }, // chạy sau],
+    { provide: 'APP_GUARD', useClass: JwtAuthGuard },
+    { provide: 'APP_GUARD', useClass: RolesGuard },
   ],
 })
 export class AuthModule {}
