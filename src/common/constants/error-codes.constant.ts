@@ -14,6 +14,9 @@ export const ErrorCode = {
   RESOURCE_NOT_FOUND: 'COMMON_RESOURCE_NOT_FOUND',
   INTERNAL_ERROR: 'COMMON_INTERNAL_ERROR',
   TOO_MANY_REQUESTS: 'COMMON_TOO_MANY_REQUESTS',
+
+  //User
+  USER_NOT_FOUND: 'USER_NOT_FOUND',
 } as const;
 
 export type ErrorCodeType = (typeof ErrorCode)[keyof typeof ErrorCode];
