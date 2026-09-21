@@ -34,10 +34,12 @@ export class EmailService {
     verificationId,
     expiresInMinutes,
   }: SendVerificationCodeParams): Promise<void> {
+    console.log(email);
     const { error } = await this.resend.emails.send(
       {
         from: this.from,
-        to: [email],
+        // For test env resend only send email to register user so that you can replace with current registered resend email
+        to: ['email'],
         subject: 'PrimeBank verification code',
         text: [
           `Your PrimeBank verification code is: ${code}`,

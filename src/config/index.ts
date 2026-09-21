@@ -3,5 +3,6 @@ export { default as databaseConfig } from './database.config';
 export { default as mailConfig } from './mail.config';
 export { default as jwtConfig } from './jwt.config';
 export { default as throttleConfig } from './throttle.config';
+export { default as otpConfig } from './otp.config';
 
 export { validationSchema } from './validation.schema';

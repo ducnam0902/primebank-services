@@ -7,33 +7,34 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UserSelected } from './users.select';
 import { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
 import { ApiSuccessResponse } from '@/common/decorators/api-success-response.decorator';
-import { Public } from '@/auth/decorators/public.decorator';
+import { Roles } from '@/auth/decorators/roles.decorator';
+import { UserRole } from '@/generated/prisma/enums';
 
 @Controller('users')
 @ApiTags('Users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @ApiOperation({ summary: 'Danh sách người dùng (phân trang)' })
+  @ApiOperation({ summary: 'User list (pagination)' })
   @ApiSuccessResponse(UserResponseDto)
   @Get()
-  @Public()
   findAll(
     @Query() query: FindUsersQueryDto,
   ): Promise<PaginatedResult<UserSelected>> {
     return this.usersService.findAll(query);
   }
 
-  @ApiOperation({ summary: 'Chi tiết người dùng' })
+  @ApiOperation({ summary: 'User Details' })
   @ApiSuccessResponse(UserResponseDto)
   @Get(':id')
   findOne(@Param('id') id: string): Promise<UserSelected> {
     return this.usersService.findOne(id);
   }
 
-  @ApiOperation({ summary: 'Cập nhật người dùng' })
+  @ApiOperation({ summary: 'Update a user' })
   @ApiSuccessResponse(UserResponseDto)
   @Patch(':id')
+  @Roles(UserRole.ADMIN)
   update(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,

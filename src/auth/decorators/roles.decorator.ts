@@ -1,5 +1,7 @@
+import { UserRole } from '@/generated/prisma/enums';
 import { CustomDecorator, SetMetadata } from '@nestjs/common';
 
 export const ROLES_KEY = 'roles';
-export const Roles: () => CustomDecorator<string> = (...roles: string[]) =>
-  SetMetadata(ROLES_KEY, roles);
+export const Roles: (roles: UserRole) => CustomDecorator<string> = (
+  ...roles: UserRole[]
+) => SetMetadata(ROLES_KEY, roles);
