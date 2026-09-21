@@ -1,3 +1,5 @@
+import { OtpServices } from './otp/otp.service';
+import { UsersService } from './../users/users.service';
 import {
   ConflictException,
   Injectable,
@@ -18,115 +20,135 @@ import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes } from 'node:crypto';
 
-import repeat from 'lodash/repeat';
 import { EmailService } from '../email/email.service';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
 import { ResendVerificationDto } from './dto/resendVerification.dto';
-import { jwtConfig, throttleConfig } from '../config';
+import { jwtConfig, otpConfig, throttleConfig } from '../config';
 import type { ConfigType } from '@nestjs/config';
-
+import { RegisterResponseDto } from './dto/register-response.dto';
+import { EmailAlreadyVerified } from '@/common/exceptions/auth/email-already-verified.exception';
+import { buildOtpResponse, generateOtp, hashOtp } from '@/auth/otp/otp.util';
+import { CustomersService } from '@/customers/customers.service';
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
     @Inject(jwtConfig.KEY)
     private readonly jwtCfg: ConfigType<typeof jwtConfig>,
     @Inject(throttleConfig.KEY)
     private readonly throttCfg: ConfigType<typeof throttleConfig>,
+    @Inject(otpConfig.KEY)
+    private readonly otpCfg: ConfigType<typeof otpConfig>,
+
+    private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly usersService: UsersService,
+    private readonly customerService: CustomersService,
+    private readonly jwtService: JwtService,
+    private readonly otpService: OtpServices,
   ) {}
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto): Promise<RegisterResponseDto> {
+    const email = dto.email.toLowerCase().trim();
+    const existingUser = await this.usersService.findByEmail(email);
+
+    if (existingUser?.emailVerifiedAt) {
+      throw new EmailAlreadyVerified();
+    }
+
+    if (existingUser) {
+      const latest = await this.prisma.authOtps.findFirst({
+        where: {
+          userId: existingUser.id,
+          purpose: Purpose.VERIFY_EMAIL,
+          invalidatedAt: null,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      if (latest) {
+        const elapsed = Math.floor(
+          (Date.now() - latest.createdAt.getTime()) / 1000,
+        );
+        const remaining = this.otpCfg.otpResendCooldownSeconds - elapsed;
+        if (remaining > 0) {
+          return buildOtpResponse(latest, existingUser.email, remaining);
+        }
+      }
+
+      const result = await this.prisma.$transaction(async (tx) =>
+        this.otpService.issueVerifyOtp(existingUser, tx),
+      );
+
+      await this.emailService.sendVerificationCode({
+        email: existingUser.email,
+        code: result.otp,
+        verificationId: result.authOtps.id,
+        expiresInMinutes: Math.ceil(this.otpCfg.otpTtlSeconds / 60),
+      });
+
+      return buildOtpResponse(
+        result.authOtps,
+        existingUser.email,
+        this.otpCfg.otpResendCooldownSeconds,
+      );
+    }
+
     const passwordHash = await argon2.hash(dto.password, {
       type: argon2.argon2id,
     });
-
-    // const existingUser = await this.prisma.user.findUnique({
-    //   where: {
-    //     email: dto.email,
-    //   },
-    // });
-
     try {
       const result = await this.prisma.$transaction(async (tx) => {
-        //Check email exists or not create new or send otp
-        const existingUser = await tx.user.findUnique({
-          where: {
-            email: dto.email,
+        const user = await this.usersService.create(
+          {
+            email,
+            passwordHash,
           },
-        });
-        let user = existingUser;
-        let customer;
+          tx,
+        );
 
-        if (user === null) {
-          user = await tx.user.create({
-            data: {
-              email: dto.email,
-              passwordHash,
-            },
-          });
-
-          customer = await tx.customer.create({
-            data: {
-              userId: user.id,
-              fullName: dto.fullName,
-              phone: dto.phone ?? null,
-              dateOfBirth: dto.dateOfBirth
-                ? new Date(`${dto.dateOfBirth}T00:00:00.000Z`)
-                : null,
-            },
-          });
-        }
-
-        const otp = this.generateOtp();
-        const codeHash = this.hashOtp(otp);
-        const authOtps = await tx.authOtps.create({
-          data: {
+        await this.customerService.create(
+          {
             userId: user.id,
-            otpHash: codeHash, // Replace with actual hashed OTP
-            expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes from now
-            purpose: 'VERIFY_EMAIL',
-            attemptCount: 0,
+            fullName: dto.fullName,
+            phone: dto.phone ?? null,
+            dateOfBirth: dto.dateOfBirth
+              ? new Date(`${dto.dateOfBirth}T00:00:00.000Z`)
+              : null,
           },
-        });
-
-        return {
-          user,
-          customer,
-          authOtps,
-          otp,
-        };
+          tx,
+        );
+        return this.otpService.issueVerifyOtp(user, tx);
       });
 
       await this.emailService.sendVerificationCode({
-        email: result.user.email,
+        email: result.email,
         code: result.otp,
         verificationId: result.authOtps.id,
-        expiresInMinutes: 5,
+        expiresInMinutes: Math.ceil(this.otpCfg.otpTtlSeconds / 60),
       });
 
-      return {
-        message: 'Mã OTP đã được gửi tới email thành công',
-        verificationRequired: true,
-        verificationId: result.authOtps.id,
-        maskedEmail: this.maskEmail(result.user.email),
-        otpExpiresAt: result.authOtps.expiresAt,
-        otpTtl: 300, // 5 minutes in seconds
-        expiresIn: Math.max(
-          0,
-          Math.floor((result.authOtps.expiresAt.getTime() - Date.now()) / 1000),
-        ),
-        resendAfter: 60,
-      };
+      return buildOtpResponse(
+        result.authOtps,
+        result.email,
+        this.otpCfg.otpResendCooldownSeconds,
+      );
     } catch (error: unknown) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        throw new ConflictException('Số điện thoại hoặc email đã tồn tại');
+        const target = error.meta?.target;
+        const fields = Array.isArray(target)
+          ? target.join(',')
+          : String(target);
+        throw new ConflictException(
+          fields.includes('email')
+            ? 'Email already in use'
+            : 'Phone number already in use',
+        );
       }
-
       throw error;
     }
   }
@@ -286,22 +308,6 @@ export class AuthService {
     return randomBytes(48).toString('base64url');
   }
 
-  private generateOtp(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-  }
-
-  private maskEmail(email: string): string {
-    return email.replace(
-      /(.{2})(.*)(?=@)/,
-      (_, visible: string, hidden: string) =>
-        visible.concat(repeat('*', hidden.length)),
-    );
-  }
-
-  private hashOtp(otp: string): string {
-    return createHash('sha256').update(otp).digest('hex');
-  }
-
   private hashRefreshToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
   }
@@ -358,8 +364,8 @@ export class AuthService {
       throw new Error('Qúa nhiều request được gửi');
     }
 
-    const hashOtp = this.hashOtp(code);
-    if (existingVerification.otpHash !== hashOtp) {
+    const codeHash = hashOtp(code);
+    if (existingVerification.otpHash !== codeHash) {
       await this.prisma.authOtps.update({
         where: {
           id: verificationId,
@@ -374,7 +380,7 @@ export class AuthService {
       throw new Error('Mã OTP nhập sai');
     }
 
-    if (existingVerification.otpHash === hashOtp) {
+    if (existingVerification.otpHash === codeHash) {
       await this.prisma.$transaction(async (tx) => {
         await tx.user.update({
           where: {
@@ -458,8 +464,8 @@ export class AuthService {
       );
     }
 
-    const otp = this.generateOtp();
-    const codeHash = this.hashOtp(otp);
+    const otp = generateOtp();
+    const codeHash = hashOtp(otp);
 
     const newVerification = await this.prisma.$transaction(
       async (tx) => {

@@ -22,10 +22,10 @@ export class RegisterDto {
   @MinLength(8)
   @MaxLength(128)
   @Matches(/[A-Za-z]/, {
-    message: 'Mật khẩu cần chứa ít một chữ cái',
+    message: 'Password must contain at least one letter',
   })
   @Matches(/[0-9]/, {
-    message: 'Mật khẩu cần chứa ít một chữ số',
+    message: 'Password must contain at least one number',
   })
   password!: string;
 
@@ -46,11 +46,10 @@ export class RegisterDto {
 
     return typeof input === 'string' ? input.trim() : input;
   })
-  @IsOptional()
   @Matches(/^(?:\+84|0)[0-9]{9}$/, {
-    message: 'Số điện thoại phải là một số điện thoại Việt Nam hợp lệ',
+    message: 'Phone number must be in a valid Vietnamese format',
   })
-  phone?: string;
+  phone!: string;
 
   @Transform(({ value }) => {
     const input: unknown = value;
@@ -59,7 +58,7 @@ export class RegisterDto {
   @IsOptional()
   @IsDateString(
     { strict: true },
-    { message: 'Ngày sinh phải theo định dạng YYYY-MM-DD' },
+    { message: 'Date of birth must be in a valid YYYY-MM-DD format' },
   )
-  dateOfBirth?: string;
+  dateOfBirth!: string;
 }

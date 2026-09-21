@@ -33,4 +33,7 @@ export const validationSchema = Joi.object({
   THROTTLE_AUTH_LIMIT: Joi.number().default(5),
   VERIFICATION_COOLDOWN_MS: Joi.string().default(60_000),
   VERIFICATION_MAX_PER_DAY: Joi.number().default(5),
+
+  OTP_TTL_SECONDS: Joi.number().default(60),
+  OTP_RESEND_COOLDOWN_SECONDS: Joi.number().default(60),
 });

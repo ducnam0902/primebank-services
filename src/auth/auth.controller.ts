@@ -28,6 +28,8 @@ import { ResendVerificationDto } from './dto/resendVerification.dto';
 import { appConfig } from '../config';
 import type { ConfigType } from '@nestjs/config';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { RegisterResponseDto } from './dto/register-response.dto';
+import { Public } from './decorators/public.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -38,7 +40,8 @@ export class AuthController {
   ) {}
 
   @Post('register')
-  register(@Body() dto: RegisterDto) {
+  @Public()
+  register(@Body() dto: RegisterDto): Promise<RegisterResponseDto> {
     return this.authService.register(dto);
   }
 
