@@ -1,4 +1,4 @@
-import { IsString, Length, Matches } from 'class-validator';
+import { IsString, IsUUID, Length, Matches } from 'class-validator';
 export class VerifyEmailDto {
   @IsString()
   @Length(6, 6)
@@ -8,5 +8,6 @@ export class VerifyEmailDto {
   code!: string;
 
   @IsString()
+  @IsUUID('4')
   verificationId!: string;
 }
