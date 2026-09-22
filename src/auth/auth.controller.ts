@@ -27,9 +27,15 @@ import { VerifyEmailDto } from './dto/verifyEmail.dto';
 import { ResendVerificationDto } from './dto/resendVerification.dto';
 import { appConfig } from '../config';
 import type { ConfigType } from '@nestjs/config';
-import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiOkResponse,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { RegisterResponseDto } from './dto/register-response.dto';
 import { Public } from './decorators/public.decorator';
+import { VerifyEmailResponse } from './dto/verify-email.response.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -41,8 +47,19 @@ export class AuthController {
 
   @Post('register')
   @Public()
+  @ApiOperation({ summary: 'Register a new user' })
+  @ApiBody({ type: [RegisterDto] })
+  @ApiOkResponse({ type: RegisterResponseDto })
+  @ApiResponse({ status: 409, description: 'Conflict exceptions.' })
   register(@Body() dto: RegisterDto): Promise<RegisterResponseDto> {
     return this.authService.register(dto);
+  }
+
+  @Post('verify-email')
+  @Public()
+  @ApiOperation({ summary: 'Verify email' })
+  async verifyEmail(@Body() dto: VerifyEmailDto): Promise<VerifyEmailResponse> {
+    return this.authService.verifyEmail(dto);
   }
 
   @Post('login')
@@ -137,11 +154,6 @@ export class AuthController {
     }
 
     this.clearRefreshTokenCookie(response);
-  }
-
-  @Post('verify-email')
-  async verifyEmail(@Body() dto: VerifyEmailDto) {
-    return this.authService.verifyEmail(dto);
   }
 
   @Post('resend-verification')

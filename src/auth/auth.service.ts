@@ -1,3 +1,4 @@
+import { maskEmail, safeEqualHex } from './otp/otp.util';
 import { OtpServices } from './otp/otp.service';
 import { UsersService } from './../users/users.service';
 import {
@@ -5,8 +6,6 @@ import {
   Injectable,
   ForbiddenException,
   UnauthorizedException,
-  GoneException,
-  NotFoundException,
   BadRequestException,
   HttpException,
   HttpStatus,
@@ -29,6 +28,14 @@ import { RegisterResponseDto } from './dto/register-response.dto';
 import { EmailAlreadyVerified } from '@/common/exceptions/auth/email-already-verified.exception';
 import { buildOtpResponse, generateOtp, hashOtp } from '@/auth/otp/otp.util';
 import { CustomersService } from '@/customers/customers.service';
+import { VerifyEmailResponse } from './dto/verify-email.response.dto';
+import { OtpNotFound } from '@/common/exceptions/auth/otp-not-found.exception';
+import {
+  OtpExpired,
+  OtpReason,
+} from '@/common/exceptions/auth/otp-expired.exception';
+import { OtpTooManyAttempts } from '@/common/exceptions/auth/otp-too-many-attempts.exception';
+import { OtpInvalid } from '@/common/exceptions/auth/otp-invalid.exception';
 @Injectable()
 export class AuthService {
   constructor(
@@ -151,6 +158,106 @@ export class AuthService {
       }
       throw error;
     }
+  }
+
+  async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResponse> {
+    const { verificationId, code } = dto;
+    const maxAttempts: number = this.throttCfg.maxAttempts ?? 5;
+    const existingVerification = await this.prisma.authOtps.findUnique({
+      where: {
+        id: verificationId,
+      },
+    });
+    if (
+      !existingVerification ||
+      existingVerification.purpose !== Purpose.VERIFY_EMAIL
+    ) {
+      throw new OtpNotFound();
+    }
+
+    if (existingVerification.consumedAt != null) {
+      throw new OtpExpired(OtpReason.CONSUMED);
+    }
+
+    if (existingVerification.invalidatedAt != null) {
+      throw new OtpExpired(OtpReason.SUPERSEDED);
+    }
+
+    if (existingVerification.expiresAt <= new Date()) {
+      await this.prisma.authOtps.updateMany({
+        where: {
+          id: verificationId,
+          invalidatedAt: null,
+        },
+        data: {
+          invalidatedAt: new Date(),
+        },
+      });
+      throw new OtpExpired(OtpReason.EXPIRED);
+    }
+
+    const authOtpsCount = await this.prisma.authOtps.update({
+      where: {
+        id: verificationId,
+      },
+      data: {
+        attemptCount: {
+          increment: 1,
+        },
+      },
+    });
+
+    const attemptsLeft = Math.max(0, maxAttempts - authOtpsCount.attemptCount);
+
+    if (authOtpsCount.attemptCount > maxAttempts) {
+      await this.prisma.authOtps.updateMany({
+        where: {
+          id: verificationId,
+          invalidatedAt: null,
+        },
+        data: {
+          invalidatedAt: new Date(),
+        },
+      });
+      throw new OtpTooManyAttempts();
+    }
+
+    const codeHash = hashOtp(code);
+    if (!safeEqualHex(codeHash, existingVerification.otpHash)) {
+      throw new OtpInvalid(attemptsLeft);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const consumed = await tx.authOtps.updateMany({
+        where: {
+          id: verificationId,
+          consumedAt: null,
+          invalidatedAt: null,
+        },
+        data: {
+          consumedAt: new Date(),
+        },
+      });
+
+      if (consumed.count === 0) {
+        throw new OtpExpired(OtpReason.CONSUMED);
+      }
+
+      const user = await tx.user.update({
+        where: {
+          id: existingVerification.userId,
+        },
+        data: {
+          emailVerifiedAt: new Date(),
+        },
+      });
+
+      return {
+        verified: true,
+        maskedEmail: maskEmail(user.email),
+        nextStep: 'LOGIN',
+      };
+    });
   }
 
   async login(dto: LoginDto) {
@@ -338,63 +445,6 @@ export class AuthService {
         revokedAt: new Date(),
       },
     });
-  }
-
-  async verifyEmail(dto: VerifyEmailDto) {
-    const { verificationId, code } = dto;
-    const maxAttempts: number = this.throttCfg.maxAttempts || 5;
-    const existingVerification = await this.prisma.authOtps.findUnique({
-      where: {
-        id: verificationId,
-      },
-    });
-    if (!existingVerification?.id) {
-      throw new NotFoundException('Không tồn tại thông tin đăng kí');
-    }
-
-    if (existingVerification.purpose !== Purpose.VERIFY_EMAIL) {
-      throw new Error('OTP đã gửi không đúng mục đích');
-    }
-
-    if (existingVerification.expiresAt <= new Date()) {
-      throw new GoneException('OTP đã gửi hết hạn');
-    }
-
-    if (existingVerification.attemptCount >= maxAttempts) {
-      throw new Error('Qúa nhiều request được gửi');
-    }
-
-    const codeHash = hashOtp(code);
-    if (existingVerification.otpHash !== codeHash) {
-      await this.prisma.authOtps.update({
-        where: {
-          id: verificationId,
-        },
-        data: {
-          attemptCount: {
-            increment: 1,
-          },
-        },
-      });
-
-      throw new Error('Mã OTP nhập sai');
-    }
-
-    if (existingVerification.otpHash === codeHash) {
-      await this.prisma.$transaction(async (tx) => {
-        await tx.user.update({
-          where: {
-            id: existingVerification.userId,
-          },
-          data: {
-            emailVerifiedAt: new Date(),
-          },
-        });
-        return {
-          message: 'Email verified successfully',
-        };
-      });
-    }
   }
 
   async resendVerification(dto: ResendVerificationDto) {
