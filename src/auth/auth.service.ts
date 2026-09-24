@@ -6,9 +6,6 @@ import {
   Injectable,
   ForbiddenException,
   UnauthorizedException,
-  BadRequestException,
-  HttpException,
-  HttpStatus,
   Inject,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
@@ -21,10 +18,10 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import { EmailService } from '../email/email.service';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
-import { ResendVerificationDto } from './dto/resendVerification.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { jwtConfig, otpConfig, throttleConfig } from '../config';
 import type { ConfigType } from '@nestjs/config';
-import { RegisterResponseDto } from './dto/register-response.dto';
+import { VerificationDto } from './dto/verification-response.dto';
 import { EmailAlreadyVerified } from '@/common/exceptions/auth/email-already-verified.exception';
 import { buildOtpResponse, generateOtp, hashOtp } from '@/auth/otp/otp.util';
 import { CustomersService } from '@/customers/customers.service';
@@ -36,6 +33,8 @@ import {
 } from '@/common/exceptions/auth/otp-expired.exception';
 import { OtpTooManyAttempts } from '@/common/exceptions/auth/otp-too-many-attempts.exception';
 import { OtpInvalid } from '@/common/exceptions/auth/otp-invalid.exception';
+import { OtpResendTooSoon } from '@/common/exceptions/auth/otp-resend-too-soon.exception';
+import { OtpResendLimitReached } from '@/common/exceptions/auth/otp-resend-limit-reached.exception';
 @Injectable()
 export class AuthService {
   constructor(
@@ -54,10 +53,9 @@ export class AuthService {
     private readonly otpService: OtpServices,
   ) {}
 
-  async register(dto: RegisterDto): Promise<RegisterResponseDto> {
+  async register(dto: RegisterDto): Promise<VerificationDto> {
     const email = dto.email.toLowerCase().trim();
     const existingUser = await this.usersService.findByEmail(email);
-
     if (existingUser?.emailVerifiedAt) {
       throw new EmailAlreadyVerified();
     }
@@ -163,11 +161,7 @@ export class AuthService {
   async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResponse> {
     const { verificationId, code } = dto;
     const maxAttempts: number = this.throttCfg.maxAttempts ?? 5;
-    const existingVerification = await this.prisma.authOtps.findUnique({
-      where: {
-        id: verificationId,
-      },
-    });
+    const existingVerification = await this.otpService.findById(verificationId);
     if (
       !existingVerification ||
       existingVerification.purpose !== Purpose.VERIFY_EMAIL
@@ -184,15 +178,7 @@ export class AuthService {
     }
 
     if (existingVerification.expiresAt <= new Date()) {
-      await this.prisma.authOtps.updateMany({
-        where: {
-          id: verificationId,
-          invalidatedAt: null,
-        },
-        data: {
-          invalidatedAt: new Date(),
-        },
-      });
+      await this.otpService.invalidateAuthOtp(verificationId);
       throw new OtpExpired(OtpReason.EXPIRED);
     }
 
@@ -210,15 +196,7 @@ export class AuthService {
     const attemptsLeft = Math.max(0, maxAttempts - authOtpsCount.attemptCount);
 
     if (authOtpsCount.attemptCount > maxAttempts) {
-      await this.prisma.authOtps.updateMany({
-        where: {
-          id: verificationId,
-          invalidatedAt: null,
-        },
-        data: {
-          invalidatedAt: new Date(),
-        },
-      });
+      await this.otpService.invalidateAuthOtp(verificationId);
       throw new OtpTooManyAttempts();
     }
 
@@ -258,6 +236,129 @@ export class AuthService {
         nextStep: 'LOGIN',
       };
     });
+  }
+
+  async resendVerification(
+    dto: ResendVerificationDto,
+  ): Promise<VerificationDto> {
+    const existedOtp = await this.otpService.findById(dto.verificationId);
+
+    if (!existedOtp || existedOtp.purpose !== Purpose.VERIFY_EMAIL)
+      throw new OtpNotFound();
+
+    if (existedOtp.user.emailVerifiedAt !== null)
+      throw new EmailAlreadyVerified();
+
+    const newOtpGenerated = generateOtp();
+    const hashGeneratedOtp = hashOtp(newOtpGenerated);
+
+    const newOtp = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+      SELECT id FROM users WHERE id = ${existedOtp.userId}::uuid FOR NO KEY UPDATE
+    `;
+      const selectedIdVerification = await tx.user.findUniqueOrThrow({
+        where: {
+          id: existedOtp.user.id,
+        },
+        select: { emailVerifiedAt: true },
+      });
+
+      if (selectedIdVerification.emailVerifiedAt)
+        throw new EmailAlreadyVerified();
+
+      const latestOtpGenerated = await tx.authOtps.findFirst({
+        where: {
+          userId: existedOtp.user.id,
+          purpose: Purpose.VERIFY_EMAIL,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        select: {
+          createdAt: true,
+        },
+      });
+
+      if (latestOtpGenerated != null) {
+        const readyAt =
+          latestOtpGenerated.createdAt.getTime() +
+          this.otpCfg.otpResendCooldownSeconds * 1000;
+        const waitMs = readyAt - Date.now();
+        if (waitMs > 0)
+          throw new OtpResendTooSoon(Math.floor(Math.ceil(waitMs / 1000)));
+      }
+
+      const windowStart = new Date(Date.now() - 3600_000);
+      const allRecordInAnHour = await tx.authOtps.findMany({
+        where: {
+          userId: existedOtp.user.id,
+          purpose: Purpose.VERIFY_EMAIL,
+          createdAt: {
+            gte: windowStart,
+          },
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+        select: {
+          createdAt: true,
+        },
+      });
+
+      if (allRecordInAnHour.length >= this.otpCfg.otpMaxIssuesPerHour) {
+        const freeAt = allRecordInAnHour[0].createdAt.getTime() + 3600_000;
+        throw new OtpResendLimitReached(
+          Math.ceil((freeAt - Date.now()) / 1000),
+        );
+      }
+
+      await tx.authOtps.updateMany({
+        where: {
+          userId: existedOtp.userId,
+          purpose: Purpose.VERIFY_EMAIL,
+          consumedAt: null,
+          invalidatedAt: null,
+        },
+        data: {
+          invalidatedAt: new Date(),
+        },
+      });
+
+      const authOtps = await tx.authOtps.create({
+        data: {
+          userId: existedOtp.userId,
+          otpHash: hashGeneratedOtp,
+          purpose: Purpose.VERIFY_EMAIL,
+          expiresAt: new Date(Date.now() + this.otpCfg.otpTtlSeconds * 1000),
+          attemptCount: 0,
+        },
+      });
+
+      return {
+        authOtps,
+      };
+    });
+
+    try {
+      await this.emailService.sendVerificationCode({
+        email: existedOtp.user.email,
+        code: newOtpGenerated,
+        verificationId: newOtp.authOtps.id,
+        expiresInMinutes: Math.ceil(this.otpCfg.otpTtlSeconds / 60),
+      });
+    } catch (error) {
+      console.log('Send email verification failed', {
+        userId: existedOtp.userId,
+        verificationId: newOtp.authOtps.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return buildOtpResponse(
+      newOtp.authOtps,
+      existedOtp.user.email,
+      this.otpCfg.otpResendCooldownSeconds,
+    );
   }
 
   async login(dto: LoginDto) {
@@ -445,108 +546,5 @@ export class AuthService {
         revokedAt: new Date(),
       },
     });
-  }
-
-  async resendVerification(dto: ResendVerificationDto) {
-    const existedVerification = await this.prisma.authOtps.findUnique({
-      where: {
-        id: dto.verificationId,
-      },
-      select: {
-        userId: true,
-        purpose: true,
-        user: {
-          select: {
-            email: true,
-            emailVerifiedAt: true,
-          },
-        },
-      },
-    });
-
-    if (
-      !existedVerification ||
-      existedVerification.purpose !== Purpose.VERIFY_EMAIL
-    ) {
-      throw new BadRequestException({
-        message: 'Invalid verification request',
-        code: 'VERIFICATION_INVALID',
-      });
-    }
-
-    if (existedVerification.user.emailVerifiedAt !== null) {
-      throw new ConflictException({
-        message: 'Email has already been verified',
-        code: 'EMAIL_ALREADY_VERIFIED',
-      });
-    }
-
-    const resendAfterSeconds = 60;
-    let retryAfter;
-
-    const latestVerification = await this.prisma.authOtps.findFirst({
-      where: {
-        userId: dto.verificationId,
-        purpose: Purpose.VERIFY_EMAIL,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      select: {
-        createdAt: true,
-      },
-    });
-
-    if (latestVerification) {
-      const resendAllowedAt =
-        latestVerification.createdAt.getTime() + resendAfterSeconds * 1000;
-      if (Date.now() < resendAllowedAt) {
-        retryAfter = Math.ceil((resendAllowedAt - Date.now()) / 1000);
-      }
-
-      throw new HttpException(
-        {
-          message: 'Mã OTP cũ vẫn đang còn hiệu lực. Vui lòng thử lại sau',
-          code: 'OTP_RESEND_TOO_SOON',
-          retryAfter,
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    const otp = generateOtp();
-    const codeHash = hashOtp(otp);
-
-    const newVerification = await this.prisma.$transaction(
-      async (tx) => {
-        return tx.authOtps.create({
-          data: {
-            userId: existedVerification.userId,
-            otpHash: codeHash, // Replace with actual hashed OTP
-            expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes from now
-            purpose: Purpose.VERIFY_EMAIL,
-            attemptCount: 0,
-          },
-        });
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
-
-    await this.emailService.sendVerificationCode({
-      email: existedVerification.user.email,
-      code: otp,
-      verificationId: newVerification.id,
-      expiresInMinutes: 5,
-    });
-
-    return {
-      message: 'Mã OTP mới đã được gửi',
-      verificationId: newVerification.id,
-      expiresIn: Math.max(
-        0,
-        Math.floor((newVerification.expiresAt.getTime() - Date.now()) / 1000),
-      ),
-      resendAfter: resendAfterSeconds,
-    };
   }
 }

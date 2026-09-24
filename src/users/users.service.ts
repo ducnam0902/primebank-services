@@ -49,9 +49,8 @@ export class UsersService {
     return user;
   }
 
-  async findByEmail(email: string): Promise<UserSelected> {
+  async findByEmail(email: string): Promise<UserSelected | null> {
     const user = await this.usersRepository.findByEmail(email);
-    if (!user) throw new UserNotFound();
     return user;
   }
 
