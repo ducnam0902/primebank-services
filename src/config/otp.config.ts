@@ -6,4 +6,5 @@ export default registerAs('otp', () => ({
   //Time between 2 times send OTP
   otpResendCooldownSeconds:
     Number(process.env.OTP_RESEND_COOLDOWN_SECONDS) || 60,
+  otpMaxIssuesPerHour: Number(process.env.OTP_MAX_ISSUES_PER_HOUR) || 5,
 }));

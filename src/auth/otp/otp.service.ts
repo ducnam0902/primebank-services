@@ -6,6 +6,7 @@ import { otpConfig } from '@/config';
 import type { ConfigType } from '@nestjs/config';
 import { Prisma } from '@/generated/prisma/client';
 import { UserSelected } from '@/users/users.select';
+import { PrismaService } from '@/database/prisma.service';
 
 interface IIssueVerifyOtp {
   otp: string;
@@ -18,6 +19,7 @@ export class OtpServices {
   constructor(
     @Inject(otpConfig.KEY)
     private readonly otpCfg: ConfigType<typeof otpConfig>,
+    private readonly prisma: PrismaService,
   ) {}
 
   async issueVerifyOtp(
@@ -50,5 +52,28 @@ export class OtpServices {
       authOtps,
       email: user.email,
     };
+  }
+
+  async invalidateAuthOtp(verificationId: string): Promise<void> {
+    await this.prisma.authOtps.updateMany({
+      where: {
+        id: verificationId,
+        invalidatedAt: null,
+      },
+      data: {
+        invalidatedAt: new Date(),
+      },
+    });
+  }
+
+  async findById(
+    verificationId: string,
+  ): Promise<Prisma.AuthOtpsGetPayload<{ include: { user: true } }> | null> {
+    return this.prisma.authOtps.findUnique({
+      where: {
+        id: verificationId,
+      },
+      include: { user: true },
+    });
   }
 }

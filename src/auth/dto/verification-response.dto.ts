@@ -1,4 +1,4 @@
-export class RegisterResponseDto {
+export class VerificationDto {
   verificationId!: string;
   maskedEmail!: string;
   expiresIn!: number;

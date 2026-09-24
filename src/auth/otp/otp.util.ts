@@ -1,6 +1,6 @@
 import { AuthOtps } from '@/generated/prisma/client';
 import { createHash } from 'node:crypto';
-import { RegisterResponseDto } from '../dto/register-response.dto';
+import { VerificationDto } from '../dto/verification-response.dto';
 import repeat from 'lodash/repeat';
 import { timingSafeEqual } from 'crypto';
 export function generateOtp(): string {
@@ -15,7 +15,7 @@ export function buildOtpResponse(
   record: AuthOtps,
   email: string,
   resendAfter: number,
-): RegisterResponseDto {
+): VerificationDto {
   return {
     message: 'OTP sent successfully',
     verificationId: record.id,
