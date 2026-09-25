@@ -13,51 +13,21 @@ datasource db {
   provider = "postgresql"
 }
 
-enum UserRole {
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  LOCKED
+}
+
+enum Role {
   CUSTOMER
   ADMIN
 }
 
-enum UserStatus {
-  ACTIVE
-  LOCKED
-  DISABLED
-}
-
-enum Purpose {
-  RESET_PASSWORD
-  VERIFY_EMAIL
-}
-
-enum TransactionCode {
-  FOOD
-  SHOPPING
-  TRANSPORT
-  BILLS
-  ENTERTAINMENT
-  OTHER
-}
-
-enum TransactionType {
-  TRANSFER
-  DEPOSIT
-  WITHDRAW
-  PAYMENT
-  SAVINGS_DEPOSIT
-  SAVINGS_WITHDRAW
-}
-
-enum TransactionStatus {
-  PENDING
-  SUCCESS
-  FAILED
-  CANCELLED
-}
-
-enum AccountStatus {
-  ACTIVE
-  LOCKED
-  CLOSED
+enum TokenType {
+  EMAIL_VERIFICATION
+  REFRESH
+  PASSWORD_RESET
 }
 
 enum AccountType {
@@ -65,145 +35,132 @@ enum AccountType {
   SAVINGS
 }
 
+enum AccountStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum TransferStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum LedgerEntryType {
+  TRANSFER_OUT
+  TRANSFER_IN
+  DEPOSIT
+}
+
 model User {
-  id              String          @id @default(uuid()) @db.Uuid
-  email           String          @unique @db.VarChar(255)
-  passwordHash    String          @map("password_hash") @db.VarChar(255)
-  role            UserRole        @default(CUSTOMER)
-  status          UserStatus      @default(ACTIVE)
-  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
-  emailVerifiedAt DateTime?       @map("email_verified_at") @db.Timestamptz(3)
-  customer        Customer?
-  authOtps        AuthOtps[]
-  refreshTokens   RefreshTokens[]
+  id                  String     @id @default(uuid()) @db.Uuid
+  email               String     @unique @db.VarChar(255)
+  passwordHash        String     @map("password_hash") @db.VarChar(255)
+  status              UserStatus @default(PENDING_VERIFICATION)
+  role                Role       @default(CUSTOMER)
+  failedLoginAttempts Int        @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime?  @map("locked_until") @db.Timestamptz(3)
+  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer Customer?
+  tokens   Token[]
 
   @@map("users")
 }
 
 model Customer {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @unique @map("user_id") @db.Uuid
-  fullName    String    @map("full_name") @db.VarChar(120)
-  phone       String?   @unique @db.VarChar(20)
-  dateOfBirth DateTime? @map("date_of_birth") @db.Date
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id          String   @id @default(uuid()) @db.Uuid
+  cifNumber   String   @unique @map("cif_number") @db.VarChar(20)
+  fullName    String   @map("full_name") @db.VarChar(120)
+  dateOfBirth DateTime @map("date_of_birth") @db.Date
+  phoneNumber String   @unique @map("phone_number") @db.VarChar(20)
+  nationalId  String   @unique @map("national_id") @db.VarChar(12)
+  address     String   @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user          User            @relation(fields: [userId], references: [id], onDelete: Restrict)
-  accounts      Accounts[]
-  beneficiaries Beneficiaries[]
+  userId String @unique @map("user_id") @db.Uuid
 
-  @@map("customer")
+  user     User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  accounts Account[]
+
+  @@map("customers")
 }
 
-model AuthOtps {
-  id            String    @id @default(uuid()) @db.Uuid
-  userId        String    @map("user_id") @db.Uuid
-  otpHash       String    @map("otp_hash") @db.VarChar(255)
-  purpose       Purpose
-  attemptCount  Int       @default(0) @map("attempt_count")
-  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
-  consumedAt    DateTime? @map("consumed_at") @db.Timestamptz(3)
-  invalidatedAt DateTime? @map("invalidated_at") @db.Timestamptz(3)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+model Token {
+  id        String    @id @default(uuid()) @db.Uuid
+  type      TokenType
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
-
-  @@index([userId, purpose])
-  @@map("auth_otps")
-}
-
-model RefreshTokens {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  tokenHash  String    @unique @map("token_hash") @db.Char(64)
-  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
-  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(3)
-  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  userId String @map("user_id") @db.Uuid
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, revokedAt])
-  @@index([expiresAt])
-  @@map("refresh_tokens")
+  @@index([userId, type])
+  @@map("tokens")
 }
 
-model Accounts {
+model Account {
   id            String        @id @default(uuid()) @db.Uuid
-  customerId    String        @map("customer_id") @db.Uuid
-  accountNumber String        @unique @map("account_number") @db.VarChar(30)
-  accountType   AccountType   @map("account_type")
-  balance       BigInt        @default(0)
+  accountNumber String        @unique @map("account_number") @db.VarChar(20)
+  type          AccountType
   currency      String        @default("VND") @db.VarChar(3)
   status        AccountStatus @default(ACTIVE)
-  isDefault     Boolean       @default(false) @map("is_default")
-  openedAt      DateTime      @default(now()) @map("opened_at") @db.Timestamptz(3)
+  balance       Decimal       @default(0) @db.Decimal(19, 2)
+  version       Int           @default(0)
   createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  customerId String @map("customer_id") @db.Uuid
+
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
-  transactionSender   Transactions[] @relation("SenderTransactions")
-  transactionReceiver Transactions[] @relation("ReceiverTransactions")
+  outgoingTransfers Transfer[]    @relation("OutgoingTransfers")
+  incomingTransfers Transfer[]    @relation("IncomingTransfers")
+  ledgerEntries     LedgerEntry[]
 
   @@index([customerId])
   @@map("accounts")
 }
 
-model TransactionCategories {
-  id        String          @id @default(uuid()) @db.Uuid
-  name      String          @unique @db.VarChar(50)
-  code      TransactionCode @unique
-  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+model Transfer {
+  id              String         @id @default(uuid()) @db.Uuid
+  referenceNumber String         @unique @map("reference_number") @db.VarChar(20)
+  fromAccountId   String         @map("from_account_id") @db.Uuid
+  toAccountId     String         @map("to_account_id") @db.Uuid
+  amount          Decimal        @db.Decimal(19, 2)
+  description     String?        @db.VarChar(255)
+  status          TransferStatus @default(PENDING)
+  idempotencyKey  String         @unique @map("idempotency_key") @db.VarChar(64)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  transactions Transactions[]
+  fromAccount   Account       @relation("OutgoingTransfers", fields: [fromAccountId], references: [id], onDelete: Restrict)
+  toAccount     Account       @relation("IncomingTransfers", fields: [toAccountId], references: [id], onDelete: Restrict)
+  ledgerEntries LedgerEntry[]
 
-  @@map("transaction_categories")
+  @@index([fromAccountId])
+  @@index([toAccountId])
+  @@map("transfers")
 }
 
-model Transactions {
-  id              String            @id @default(uuid()) @db.Uuid
-  fromAccountId   String?           @map("from_account_id") @db.Uuid
-  toAccountId     String?           @map("to_account_id") @db.Uuid
-  categoryId      String?           @map("category_id") @db.Uuid
-  transactionType TransactionType   @map("transaction_type")
-  amount          BigInt
-  currency        String            @default("VND") @db.VarChar(3)
-  status          TransactionStatus @default(PENDING)
-  description     String?           @db.VarChar(255)
-  referenceCode   String            @unique @map("reference_code") @db.VarChar(50)
-  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  completedAt     DateTime?         @map("completed_at") @db.Timestamptz(3)
+model LedgerEntry {
+  id           String          @id @default(uuid()) @db.Uuid
+  accountId    String          @map("account_id") @db.Uuid
+  transferId   String?         @map("transfer_id") @db.Uuid
+  type         LedgerEntryType
+  amount       Decimal         @db.Decimal(19, 2)
+  balanceAfter Decimal         @map("balance_after") @db.Decimal(19, 2)
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  account      Account         @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  transfer     Transfer?       @relation(fields: [transferId], references: [id], onDelete: Restrict)
 
-  transactionSender   Accounts?              @relation("SenderTransactions", fields: [fromAccountId], references: [id], onDelete: Restrict)
-  transactionReceiver Accounts?              @relation("ReceiverTransactions", fields: [toAccountId], references: [id], onDelete: Restrict)
-  transactionCategory TransactionCategories? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-
-  @@index([fromAccountId, createdAt])
-  @@index([toAccountId, createdAt])
-  @@index([categoryId])
-  @@index([status, createdAt])
-  @@map("transactions")
-}
-
-model Beneficiaries {
-  id            String   @id @default(uuid()) @db.Uuid
-  customerId    String   @map("customer_id") @db.Uuid
-  bankCode      String   @map("bank_code") @db.VarChar(20)
-  bankName      String   @map("bank_name") @db.VarChar(100)
-  accountNumber String   @map("account_number") @db.VarChar(30)
-  accountName   String   @map("account_name") @db.VarChar(100)
-  nickname      String   @db.VarChar(100)
-  isInternal    Boolean  @default(false) @map("is_internal")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
-
-  @@unique([customerId, bankCode, accountNumber])
-  @@map("beneficiaries")
+  @@index([accountId, createdAt])
+  @@index([transferId])
+  @@map("ledger_entries")
 }
