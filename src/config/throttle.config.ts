@@ -7,5 +7,4 @@ export default registerAs('throttle', () => ({
   verificationCooldownMs:
     Number(process.env.VERIFICATION_COOLDOWN_MS) || 60_000,
   verificationMaxPerDay: Number(process.env.VERIFICATION_MAX_PER_DAY) || 5,
-  maxAttempts: Number(process.env.MAX_ATTEMPTS) || 5,
 }));

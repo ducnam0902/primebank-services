@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Query,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -18,6 +26,7 @@ export class UsersController {
   @ApiOperation({ summary: 'User list (pagination)' })
   @ApiSuccessResponse(UserResponseDto)
   @Get()
+  @Roles(UserRole.ADMIN)
   findAll(
     @Query() query: FindUsersQueryDto,
   ): Promise<PaginatedResult<UserSelected>> {
@@ -27,7 +36,10 @@ export class UsersController {
   @ApiOperation({ summary: 'User Details' })
   @ApiSuccessResponse(UserResponseDto)
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<UserSelected> {
+  @Roles(UserRole.ADMIN)
+  findOne(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<UserSelected> {
     return this.usersService.findOne(id);
   }
 
@@ -36,7 +48,7 @@ export class UsersController {
   @Patch(':id')
   @Roles(UserRole.ADMIN)
   update(
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() dto: UpdateUserDto,
   ): Promise<UserSelected> {
     return this.usersService.update(id, dto);

@@ -1,10 +1,11 @@
 import { AuthOtps } from '@/generated/prisma/client';
-import { createHash } from 'node:crypto';
-import { VerificationDto } from '../dto/verification-response.dto';
+import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import repeat from 'lodash/repeat';
-import { timingSafeEqual } from 'crypto';
+
+import { VerificationDto } from '../dto/verification-response.dto';
+
 export function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 }
 
 export function hashOtp(otp: string): string {

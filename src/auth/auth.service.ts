@@ -7,6 +7,7 @@ import {
   ForbiddenException,
   UnauthorizedException,
   Inject,
+  Logger,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { Prisma, Purpose } from '../generated/prisma/client';
@@ -19,7 +20,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { EmailService } from '../email/email.service';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
-import { jwtConfig, otpConfig, throttleConfig } from '../config';
+import { jwtConfig, otpConfig } from '../config';
 import type { ConfigType } from '@nestjs/config';
 import { VerificationDto } from './dto/verification-response.dto';
 import { EmailAlreadyVerified } from '@/common/exceptions/auth/email-already-verified.exception';
@@ -40,8 +41,6 @@ export class AuthService {
   constructor(
     @Inject(jwtConfig.KEY)
     private readonly jwtCfg: ConfigType<typeof jwtConfig>,
-    @Inject(throttleConfig.KEY)
-    private readonly throttCfg: ConfigType<typeof throttleConfig>,
     @Inject(otpConfig.KEY)
     private readonly otpCfg: ConfigType<typeof otpConfig>,
 
@@ -51,6 +50,7 @@ export class AuthService {
     private readonly customerService: CustomersService,
     private readonly jwtService: JwtService,
     private readonly otpService: OtpServices,
+    private readonly logger: Logger,
   ) {}
 
   async register(dto: RegisterDto): Promise<VerificationDto> {
@@ -160,7 +160,7 @@ export class AuthService {
 
   async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResponse> {
     const { verificationId, code } = dto;
-    const maxAttempts: number = this.throttCfg.maxAttempts ?? 5;
+    const maxAttempts: number = this.otpCfg.otpMaxAttempts ?? 5;
     const existingVerification = await this.otpService.findById(verificationId);
     if (
       !existingVerification ||
@@ -284,8 +284,7 @@ export class AuthService {
           latestOtpGenerated.createdAt.getTime() +
           this.otpCfg.otpResendCooldownSeconds * 1000;
         const waitMs = readyAt - Date.now();
-        if (waitMs > 0)
-          throw new OtpResendTooSoon(Math.floor(Math.ceil(waitMs / 1000)));
+        if (waitMs > 0) throw new OtpResendTooSoon(Math.ceil(waitMs / 1000));
       }
 
       const windowStart = new Date(Date.now() - 3600_000);
@@ -347,7 +346,7 @@ export class AuthService {
         expiresInMinutes: Math.ceil(this.otpCfg.otpTtlSeconds / 60),
       });
     } catch (error) {
-      console.log('Send email verification failed', {
+      this.logger.error('Send email verification failed', {
         userId: existedOtp.userId,
         verificationId: newOtp.authOtps.id,
         error: error instanceof Error ? error.message : String(error),
