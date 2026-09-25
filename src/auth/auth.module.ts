@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { DatabaseModule } from '../database/database.module';
@@ -39,6 +39,7 @@ import { OtpServices } from './otp/otp.service';
   ],
   controllers: [AuthController],
   providers: [
+    Logger,
     AuthService,
     JwtStrategy,
     OtpServices,
