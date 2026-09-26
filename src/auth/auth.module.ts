@@ -6,7 +6,7 @@ import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
 import { ConfigModule, ConfigType } from '@nestjs/config';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { EmailModule } from '../email/email.module';
-import { jwtConfig, otpConfig, throttleConfig } from '../config';
+import { jwtConfig, otpConfig } from '../config';
 import { RolesGuard } from './guards/roles.guard';
 import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
 import { TransformResponseInterceptor } from '@/common/interceptors/transform-response.interceptor';
@@ -23,7 +23,6 @@ import { OtpServices } from './otp/otp.service';
     UsersModule,
     CustomersModule,
     ConfigModule.forFeature(jwtConfig),
-    ConfigModule.forFeature(throttleConfig),
     ConfigModule.forFeature(otpConfig),
     PassportModule,
     JwtModule.registerAsync({
