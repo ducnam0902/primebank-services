@@ -4,7 +4,7 @@ export const CUSTOMER_SELECT = {
   id: true,
   userId: true,
   fullName: true,
-  phone: true,
+  phoneNumber: true,
   dateOfBirth: true,
 } satisfies Prisma.CustomerSelect;
 

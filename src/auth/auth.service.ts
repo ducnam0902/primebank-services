@@ -5,15 +5,13 @@ import {
   ConflictException,
   Injectable,
   ForbiddenException,
-  UnauthorizedException,
   Inject,
   Logger,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
-import { Prisma, Purpose } from '../generated/prisma/client';
+import { Prisma, OtpPurpose, UserStatus } from '../generated/prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes } from 'node:crypto';
 
@@ -56,15 +54,15 @@ export class AuthService {
   async register(dto: RegisterDto): Promise<VerificationDto> {
     const email = dto.email.toLowerCase().trim();
     const existingUser = await this.usersService.findByEmail(email);
-    if (existingUser?.emailVerifiedAt) {
+    if (existingUser?.status !== UserStatus.PENDING_VERIFICATION) {
       throw new EmailAlreadyVerified();
     }
 
     if (existingUser) {
-      const latest = await this.prisma.authOtps.findFirst({
+      const latest = await this.prisma.otp.findFirst({
         where: {
           userId: existingUser.id,
-          purpose: Purpose.VERIFY_EMAIL,
+          purpose: OtpPurpose.EMAIL_VERIFICATION,
           invalidatedAt: null,
         },
         orderBy: {
@@ -117,10 +115,11 @@ export class AuthService {
           {
             userId: user.id,
             fullName: dto.fullName,
-            phone: dto.phone ?? null,
-            dateOfBirth: dto.dateOfBirth
-              ? new Date(`${dto.dateOfBirth}T00:00:00.000Z`)
-              : null,
+            phoneNumber: dto.phoneNumber,
+            dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`),
+            cifNumber: '',
+            nationalId: '',
+            address: '',
           },
           tx,
         );
@@ -164,7 +163,7 @@ export class AuthService {
     const existingVerification = await this.otpService.findById(verificationId);
     if (
       !existingVerification ||
-      existingVerification.purpose !== Purpose.VERIFY_EMAIL
+      existingVerification.purpose !== OtpPurpose.EMAIL_VERIFICATION
     ) {
       throw new OtpNotFound();
     }
@@ -182,7 +181,7 @@ export class AuthService {
       throw new OtpExpired(OtpReason.EXPIRED);
     }
 
-    const authOtpsCount = await this.prisma.authOtps.update({
+    const authOtpsCount = await this.prisma.otp.update({
       where: {
         id: verificationId,
       },
@@ -206,7 +205,7 @@ export class AuthService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const consumed = await tx.authOtps.updateMany({
+      const consumed = await tx.otp.updateMany({
         where: {
           id: verificationId,
           consumedAt: null,
@@ -226,7 +225,7 @@ export class AuthService {
           id: existingVerification.userId,
         },
         data: {
-          emailVerifiedAt: new Date(),
+          status: UserStatus.ACTIVE,
         },
       });
 
@@ -243,10 +242,10 @@ export class AuthService {
   ): Promise<VerificationDto> {
     const existedOtp = await this.otpService.findById(dto.verificationId);
 
-    if (!existedOtp || existedOtp.purpose !== Purpose.VERIFY_EMAIL)
+    if (!existedOtp || existedOtp.purpose !== OtpPurpose.EMAIL_VERIFICATION)
       throw new OtpNotFound();
 
-    if (existedOtp.user.emailVerifiedAt !== null)
+    if (existedOtp.user.status !== UserStatus.PENDING_VERIFICATION)
       throw new EmailAlreadyVerified();
 
     const newOtpGenerated = generateOtp();
@@ -260,16 +259,16 @@ export class AuthService {
         where: {
           id: existedOtp.user.id,
         },
-        select: { emailVerifiedAt: true },
+        select: { status: true },
       });
 
-      if (selectedIdVerification.emailVerifiedAt)
+      if (selectedIdVerification.status !== UserStatus.PENDING_VERIFICATION)
         throw new EmailAlreadyVerified();
 
-      const latestOtpGenerated = await tx.authOtps.findFirst({
+      const latestOtpGenerated = await tx.otp.findFirst({
         where: {
           userId: existedOtp.user.id,
-          purpose: Purpose.VERIFY_EMAIL,
+          purpose: OtpPurpose.EMAIL_VERIFICATION,
         },
         orderBy: {
           createdAt: 'desc',
@@ -288,10 +287,10 @@ export class AuthService {
       }
 
       const windowStart = new Date(Date.now() - 3600_000);
-      const allRecordInAnHour = await tx.authOtps.findMany({
+      const allRecordInAnHour = await tx.otp.findMany({
         where: {
           userId: existedOtp.user.id,
-          purpose: Purpose.VERIFY_EMAIL,
+          purpose: OtpPurpose.EMAIL_VERIFICATION,
           createdAt: {
             gte: windowStart,
           },
@@ -311,10 +310,10 @@ export class AuthService {
         );
       }
 
-      await tx.authOtps.updateMany({
+      await tx.otp.updateMany({
         where: {
           userId: existedOtp.userId,
-          purpose: Purpose.VERIFY_EMAIL,
+          purpose: OtpPurpose.EMAIL_VERIFICATION,
           consumedAt: null,
           invalidatedAt: null,
         },
@@ -323,11 +322,11 @@ export class AuthService {
         },
       });
 
-      const authOtps = await tx.authOtps.create({
+      const authOtps = await tx.otp.create({
         data: {
           userId: existedOtp.userId,
           otpHash: hashGeneratedOtp,
-          purpose: Purpose.VERIFY_EMAIL,
+          purpose: OtpPurpose.EMAIL_VERIFICATION,
           expiresAt: new Date(Date.now() + this.otpCfg.otpTtlSeconds * 1000),
           attemptCount: 0,
         },
@@ -360,76 +359,6 @@ export class AuthService {
     );
   }
 
-  async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        email: dto.email,
-      },
-      include: {
-        customer: true,
-      },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
-    }
-
-    const isPasswordValid = await argon2.verify(
-      user.passwordHash,
-      dto.password,
-    );
-
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
-    }
-
-    if (user.emailVerifiedAt === null) {
-      throw new ForbiddenException(
-        'Vui lòng xác thực email trước khi đăng nhập',
-      );
-    }
-
-    if (user.status !== 'ACTIVE') {
-      throw new ForbiddenException('Tài khoản của bạn đã bị vô hiệu hóa');
-    }
-
-    const payload = { sub: user.id, email: user.email, role: user.role };
-    const accessToken = await this.jwtService.signAsync(payload);
-
-    const refreshToken = this.generateRefreshToken();
-    const refreshTokenHash = this.hashRefreshToken(refreshToken);
-
-    const refreshTokenExpiresAt = this.getRefreshTokenExpiresAt();
-
-    await this.prisma.refreshTokens.create({
-      data: {
-        userId: user.id,
-        tokenHash: refreshTokenHash,
-        expiresAt: refreshTokenExpiresAt,
-      },
-    });
-
-    return {
-      accessToken,
-      refreshToken,
-      refreshTokenExpiresAt,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-        customer: user.customer
-          ? {
-              id: user.customer.id,
-              fullName: user.customer.fullName,
-              phone: user.customer.phone,
-              dateOfBirth: user.customer.dateOfBirth,
-            }
-          : null,
-      },
-    };
-  }
-
   async getCurrentUser(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -442,7 +371,7 @@ export class AuthService {
           select: {
             id: true,
             fullName: true,
-            phone: true,
+            phoneNumber: true,
             dateOfBirth: true,
           },
         },
@@ -454,61 +383,6 @@ export class AuthService {
     }
 
     return user;
-  }
-
-  async refresh(rawRefreshToken: string) {
-    const currentTokenHash = this.hashRefreshToken(rawRefreshToken);
-
-    const now = new Date();
-
-    const storedToken = await this.prisma.refreshTokens.findUnique({
-      where: { tokenHash: currentTokenHash },
-      include: { user: true },
-    });
-
-    if (
-      !storedToken ||
-      storedToken.revokedAt !== null ||
-      storedToken.expiresAt <= now ||
-      storedToken.user.status !== 'ACTIVE'
-    ) {
-      throw new UnauthorizedException('Refresh token is invalid or expired');
-    }
-
-    const newRefreshToken = this.generateRefreshToken();
-    const newTokenHash = this.hashRefreshToken(newRefreshToken);
-
-    const payload = {
-      sub: storedToken.user.id,
-      email: storedToken.user.email,
-      role: storedToken.user.role,
-    };
-    const newAccessToken = await this.jwtService.signAsync(payload);
-
-    const rotationResult = await this.prisma.refreshTokens.updateMany({
-      where: {
-        id: storedToken.id,
-        tokenHash: currentTokenHash,
-        revokedAt: null,
-        expiresAt: { gt: now },
-      },
-      data: {
-        tokenHash: newTokenHash,
-        lastUsedAt: now,
-      },
-    });
-
-    if (rotationResult.count !== 1) {
-      throw new UnauthorizedException('Failed to refresh token');
-    }
-
-    return {
-      accessToken: newAccessToken,
-      expiresAt: this.getAccessTokenTtlSeconds(),
-
-      newRefreshToken,
-      refreshTokenExpiresAt: storedToken.expiresAt, // Keep the original expiration date for the new token
-    };
   }
 
   private generateRefreshToken(): string {
@@ -531,19 +405,5 @@ export class AuthService {
 
   private getAccessTokenTtlSeconds(): number {
     return Number(this.jwtCfg.accessExpiresIn) || 900; // Default to 15 minutes
-  }
-
-  async logout(rawRefreshToken: string): Promise<void> {
-    const tokenHash = this.hashRefreshToken(rawRefreshToken);
-
-    await this.prisma.refreshTokens.updateMany({
-      where: {
-        tokenHash,
-        revokedAt: null,
-      },
-      data: {
-        revokedAt: new Date(),
-      },
-    });
   }
 }

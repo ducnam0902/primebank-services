@@ -1,4 +1,4 @@
-import { AuthOtps } from '@/generated/prisma/client';
+import { Otp } from '@/generated/prisma/client';
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import repeat from 'lodash/repeat';
 
@@ -13,7 +13,7 @@ export function hashOtp(otp: string): string {
 }
 
 export function buildOtpResponse(
-  record: AuthOtps,
+  record: Otp,
   email: string,
   resendAfter: number,
 ): VerificationDto {

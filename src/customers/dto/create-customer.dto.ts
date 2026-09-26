@@ -1,6 +1,9 @@
 export interface CreateCustomerDto {
   userId: string;
   fullName: string;
-  phone: string;
-  dateOfBirth: Date | null;
+  phoneNumber: string;
+  dateOfBirth: Date;
+  cifNumber: string;
+  nationalId: string;
+  address: string;
 }
