@@ -49,7 +49,7 @@ export class RegisterDto {
   @Matches(/^(?:\+84|0)[0-9]{9}$/, {
     message: 'Phone number must be in a valid Vietnamese format',
   })
-  phone!: string;
+  phoneNumber!: string;
 
   @Transform(({ value }) => {
     const input: unknown = value;

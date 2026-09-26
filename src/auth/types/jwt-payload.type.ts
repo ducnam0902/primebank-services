@@ -1,9 +1,9 @@
-import type { UserRole } from '@/generated/prisma/client';
+import type { Role } from '@/generated/prisma/client';
 
 export interface JwtPayload {
   sub: string;
   email: string;
-  role: UserRole;
+  role: Role;
   iat: number;
   exp: number;
   type: 'access' | 'refresh';
@@ -12,5 +12,5 @@ export interface JwtPayload {
 export interface AuthenticatedUser {
   id: string;
   email: string;
-  role: UserRole;
+  role: Role;
 }

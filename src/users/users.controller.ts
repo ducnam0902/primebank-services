@@ -16,7 +16,7 @@ import { UserSelected } from './users.select';
 import { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
 import { ApiSuccessResponse } from '@/common/decorators/api-success-response.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
-import { UserRole } from '@/generated/prisma/enums';
+import { Role } from '@/generated/prisma/enums';
 
 @Controller('users')
 @ApiTags('Users')
@@ -26,7 +26,7 @@ export class UsersController {
   @ApiOperation({ summary: 'User list (pagination)' })
   @ApiSuccessResponse(UserResponseDto)
   @Get()
-  @Roles(UserRole.ADMIN)
+  @Roles(Role.ADMIN)
   findAll(
     @Query() query: FindUsersQueryDto,
   ): Promise<PaginatedResult<UserSelected>> {
@@ -36,7 +36,7 @@ export class UsersController {
   @ApiOperation({ summary: 'User Details' })
   @ApiSuccessResponse(UserResponseDto)
   @Get(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(Role.ADMIN)
   findOne(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
   ): Promise<UserSelected> {
@@ -46,7 +46,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Update a user' })
   @ApiSuccessResponse(UserResponseDto)
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(Role.ADMIN)
   update(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() dto: UpdateUserDto,

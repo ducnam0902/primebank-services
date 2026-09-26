@@ -7,7 +7,8 @@ export const USER_SELECT = {
   createdAt: true,
   status: true,
   updatedAt: true,
-  emailVerifiedAt: true,
+  failedLoginAttempts: true,
+  lockedUntil: true,
 } satisfies Prisma.UserSelect;
 
 export const USER_AUTH_SELECT = {
@@ -17,8 +18,9 @@ export const USER_AUTH_SELECT = {
   role: true,
   createdAt: true,
   status: true,
+  failedLoginAttempts: true,
+  lockedUntil: true,
   updatedAt: true,
-  emailVerifiedAt: true,
 } satisfies Prisma.UserSelect;
 
 export type UserSelected = Prisma.UserGetPayload<{

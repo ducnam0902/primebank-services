@@ -5,6 +5,7 @@ import type { ConfigType } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AuthenticatedUser, JwtPayload } from '../types/jwt-payload.type';
+import { UserStatus } from '@/generated/prisma/enums';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
@@ -33,11 +34,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         id: true,
         email: true,
         role: true,
-        emailVerifiedAt: true,
+        status: true,
       },
     });
 
-    if (!user || !user.emailVerifiedAt) {
+    if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException();
     }
 

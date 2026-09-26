@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { generateOtp, hashOtp } from './otp.util';
-import { Purpose } from '@/generated/prisma/enums';
-import { AuthOtps } from '@/generated/prisma/client';
+import { OtpPurpose } from '@/generated/prisma/enums';
+import { Otp } from '@/generated/prisma/client';
 import { otpConfig } from '@/config';
 import type { ConfigType } from '@nestjs/config';
 import { Prisma } from '@/generated/prisma/client';
@@ -10,7 +10,7 @@ import { PrismaService } from '@/database/prisma.service';
 
 interface IIssueVerifyOtp {
   otp: string;
-  authOtps: AuthOtps;
+  authOtps: Otp;
   email: string;
 }
 
@@ -26,10 +26,10 @@ export class OtpServices {
     user: UserSelected,
     tx: Prisma.TransactionClient,
   ): Promise<IIssueVerifyOtp> {
-    await tx.authOtps.updateMany({
+    await tx.otp.updateMany({
       where: {
         userId: user.id,
-        purpose: Purpose.VERIFY_EMAIL,
+        purpose: OtpPurpose.EMAIL_VERIFICATION,
         invalidatedAt: null,
       },
       data: {
@@ -37,11 +37,11 @@ export class OtpServices {
       },
     });
     const otp = generateOtp();
-    const authOtps = await tx.authOtps.create({
+    const authOtps = await tx.otp.create({
       data: {
         userId: user.id,
         otpHash: hashOtp(otp),
-        purpose: Purpose.VERIFY_EMAIL,
+        purpose: OtpPurpose.EMAIL_VERIFICATION,
         expiresAt: new Date(Date.now() + this.otpCfg.otpTtlSeconds * 1000),
         attemptCount: 0,
       },
@@ -55,7 +55,7 @@ export class OtpServices {
   }
 
   async invalidateAuthOtp(verificationId: string): Promise<void> {
-    await this.prisma.authOtps.updateMany({
+    await this.prisma.otp.updateMany({
       where: {
         id: verificationId,
         invalidatedAt: null,
@@ -68,8 +68,8 @@ export class OtpServices {
 
   async findById(
     verificationId: string,
-  ): Promise<Prisma.AuthOtpsGetPayload<{ include: { user: true } }> | null> {
-    return this.prisma.authOtps.findUnique({
+  ): Promise<Prisma.OtpGetPayload<{ include: { user: true } }> | null> {
+    return this.prisma.otp.findUnique({
       where: {
         id: verificationId,
       },
