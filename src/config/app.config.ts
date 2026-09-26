@@ -6,5 +6,4 @@ export default registerAs('app', () => ({
   apiPrefix: process.env.API_PREFIX || '/api',
   allowedOrigins:
     process.env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()) ?? [],
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
 }));
