@@ -1,20 +1,16 @@
+import { CustomersModule } from '@/customers/customers.module';
+import { UsersModule } from '@/users/users.module';
 import { Logger, Module } from '@nestjs/common';
+import { ConfigModule, ConfigType } from '@nestjs/config';
+import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { jwtConfig, otpConfig } from '../config';
+import { DatabaseModule } from '../database/database.module';
+import { EmailModule } from '../email/email.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { DatabaseModule } from '../database/database.module';
-import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
-import { ConfigModule, ConfigType } from '@nestjs/config';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { EmailModule } from '../email/email.module';
-import { jwtConfig, otpConfig } from '../config';
-import { RolesGuard } from './guards/roles.guard';
-import { AllExceptionsFilter } from '@/common/filters/all-exceptions.filter';
-import { TransformResponseInterceptor } from '@/common/interceptors/transform-response.interceptor';
-import { PassportModule } from '@nestjs/passport';
-import { JwtStrategy } from './strategies/jwt.strategy';
-import { UsersModule } from '@/users/users.module';
-import { CustomersModule } from '@/customers/customers.module';
 import { OtpServices } from './otp/otp.service';
+import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
@@ -37,15 +33,6 @@ import { OtpServices } from './otp/otp.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [
-    Logger,
-    AuthService,
-    JwtStrategy,
-    OtpServices,
-    { provide: 'APP_FILTER', useClass: AllExceptionsFilter },
-    { provide: 'APP_INTERCEPTOR', useClass: TransformResponseInterceptor },
-    { provide: 'APP_GUARD', useClass: JwtAuthGuard },
-    { provide: 'APP_GUARD', useClass: RolesGuard },
-  ],
+  providers: [Logger, AuthService, JwtStrategy, OtpServices],
 })
 export class AuthModule {}

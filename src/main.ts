@@ -4,7 +4,6 @@ import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { setupSwagger } from '@/common/swagger/swagger.setup';
 
 async function bootstrap(): Promise<void> {
@@ -39,7 +38,6 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  app.useGlobalFilters(new AllExceptionsFilter());
   app.enableShutdownHooks();
   const port = Number(configService.getOrThrow('app.port'));
 

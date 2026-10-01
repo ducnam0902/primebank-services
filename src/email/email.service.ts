@@ -2,6 +2,7 @@ import {
   Injectable,
   ServiceUnavailableException,
   Inject,
+  Logger,
 } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { Resend } from 'resend';
@@ -18,7 +19,8 @@ interface SendVerificationCodeParams {
 export class EmailService {
   private readonly resend: Resend;
   private readonly from: string;
-
+  private readonly driver: string;
+  private readonly logger = new Logger();
   constructor(
     @Inject(mailConfig.KEY)
     private readonly mailCfg: ConfigType<typeof mailConfig>,
@@ -26,6 +28,7 @@ export class EmailService {
     this.resend = new Resend(this.mailCfg.apiKey);
 
     this.from = this.mailCfg.from || '';
+    this.driver = this.mailCfg.mailDriver || 'resend';
   }
 
   async sendVerificationCode({
@@ -34,12 +37,16 @@ export class EmailService {
     verificationId,
     expiresInMinutes,
   }: SendVerificationCodeParams): Promise<void> {
-    console.log(email);
+    if (this.driver === 'log') {
+      this.logger.log(
+        `[MAIL] to=${email} | [VERIFICATION] id=${verificationId} | [CODE] id=${code}\n`,
+      );
+      return;
+    }
     const { error } = await this.resend.emails.send(
       {
         from: this.from,
-        // For test env resend only send email to register user so that you can replace with current registered resend email
-        to: ['email'],
+        to: [email],
         subject: 'PrimeBank verification code',
         text: [
           `Your PrimeBank verification code is: ${code}`,

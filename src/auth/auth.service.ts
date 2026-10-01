@@ -1,4 +1,4 @@
-import { maskEmail, safeEqualHex } from './otp/otp.util';
+import { generateCifNumber, maskEmail, safeEqualHex } from './otp/otp.util';
 import { OtpServices } from './otp/otp.service';
 import { UsersService } from './../users/users.service';
 import {
@@ -54,7 +54,10 @@ export class AuthService {
   async register(dto: RegisterDto): Promise<VerificationDto> {
     const email = dto.email.toLowerCase().trim();
     const existingUser = await this.usersService.findByEmail(email);
-    if (existingUser?.status !== UserStatus.PENDING_VERIFICATION) {
+    if (
+      existingUser &&
+      existingUser?.status !== UserStatus.PENDING_VERIFICATION
+    ) {
       throw new EmailAlreadyVerified();
     }
 
@@ -80,8 +83,10 @@ export class AuthService {
         }
       }
 
+      const newOtp = generateOtp();
+
       const result = await this.prisma.$transaction(async (tx) =>
-        this.otpService.issueVerifyOtp(existingUser, tx),
+        this.otpService.issueVerifyOtp(existingUser, newOtp, tx),
       );
 
       await this.emailService.sendVerificationCode({
@@ -101,7 +106,9 @@ export class AuthService {
     const passwordHash = await argon2.hash(dto.password, {
       type: argon2.argon2id,
     });
+    const generatedCifNumber = generateCifNumber();
     try {
+      const newOtp = generateOtp();
       const result = await this.prisma.$transaction(async (tx) => {
         const user = await this.usersService.create(
           {
@@ -117,13 +124,13 @@ export class AuthService {
             fullName: dto.fullName,
             phoneNumber: dto.phoneNumber,
             dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`),
-            cifNumber: '',
-            nationalId: '',
-            address: '',
+            cifNumber: generatedCifNumber,
+            nationalId: dto.nationalId,
+            address: dto.address,
           },
           tx,
         );
-        return this.otpService.issueVerifyOtp(user, tx);
+        return this.otpService.issueVerifyOtp(user, newOtp, tx);
       });
 
       await this.emailService.sendVerificationCode({

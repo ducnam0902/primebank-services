@@ -15,6 +15,7 @@ export const validationSchema = Joi.object({
 
   MAIL_FROM: Joi.string().default('onboarding@resend.dev'),
   MAIL_API_KEY: Joi.string().required(),
+  MAIL_DRIVER: Joi.string().required(),
 
   DATABASE_URL: Joi.string().required(),
   DIRECT_URL: Joi.string().required(),

@@ -8,6 +8,10 @@ export function generateOtp(): string {
   return randomInt(100000, 1000000).toString();
 }
 
+export function generateCifNumber(): string {
+  return randomInt(1000000000, 10000000000).toString();
+}
+
 export function hashOtp(otp: string): string {
   return createHash('sha256').update(otp).digest('hex');
 }

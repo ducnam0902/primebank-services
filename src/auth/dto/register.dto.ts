@@ -2,8 +2,8 @@ import { Transform } from 'class-transformer';
 import {
   IsDateString,
   IsEmail,
-  IsOptional,
   IsString,
+  Length,
   Matches,
   MaxLength,
   MinLength,
@@ -34,7 +34,7 @@ export class RegisterDto {
     return typeof input === 'string' ? input.trim() : input;
   })
   @IsString()
-  @MinLength(2)
+  @MinLength(1)
   @MaxLength(120)
   fullName!: string;
 
@@ -51,14 +51,27 @@ export class RegisterDto {
   })
   phoneNumber!: string;
 
-  @Transform(({ value }) => {
-    const input: unknown = value;
-    return input === '' || input === null ? undefined : input;
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'Date of birth must be in a valid YYYY-MM-DD format',
   })
-  @IsOptional()
   @IsDateString(
     { strict: true },
     { message: 'Date of birth must be in a valid YYYY-MM-DD format' },
   )
   dateOfBirth!: string;
+
+  @IsString()
+  @Matches(/^\d{12}$/)
+  @Matches(/[0-9]{12}$/, {
+    message: 'National id must be in a valid Vietnamese format',
+  })
+  nationalId!: string;
+
+  @IsString()
+  @Transform(({ value }) => {
+    const input: unknown = value;
+    return typeof input === 'string' ? input.trim() : input;
+  })
+  @Length(1, 255)
+  address!: string;
 }

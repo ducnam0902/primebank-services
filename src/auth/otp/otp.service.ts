@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { generateOtp, hashOtp } from './otp.util';
+import { hashOtp } from './otp.util';
 import { OtpPurpose } from '@/generated/prisma/enums';
 import { Otp } from '@/generated/prisma/client';
 import { otpConfig } from '@/config';
@@ -24,6 +24,7 @@ export class OtpServices {
 
   async issueVerifyOtp(
     user: UserSelected,
+    otp: string,
     tx: Prisma.TransactionClient,
   ): Promise<IIssueVerifyOtp> {
     await tx.otp.updateMany({
@@ -36,7 +37,6 @@ export class OtpServices {
         invalidatedAt: new Date(),
       },
     });
-    const otp = generateOtp();
     const authOtps = await tx.otp.create({
       data: {
         userId: user.id,
