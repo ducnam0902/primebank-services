@@ -102,7 +102,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       case 'P2002': // unique constraint
         return {
           statusCode: HttpStatus.CONFLICT,
-          errorCode: ErrorCode.EMAIL_ALREADY_EXISTS,
+          errorCode: ErrorCode.EMAIL_ALREADY_REGISTERED,
           message: 'Data already exists',
           details: undefined,
         };

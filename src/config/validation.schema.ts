@@ -23,4 +23,5 @@ export const validationSchema = Joi.object({
   OTP_TTL_SECONDS: Joi.number().default(300),
   OTP_RESEND_COOLDOWN_SECONDS: Joi.number().less(Joi.ref('OTP_TTL_SECONDS')),
   OTP_MAX_ISSUES_PER_HOUR: Joi.number().default(5),
+  OTP_HMAC_SECRET: Joi.string().min(32).required(),
 });

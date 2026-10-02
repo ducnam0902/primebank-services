@@ -28,8 +28,11 @@ export class UserRepository {
     ]);
   }
 
-  findByEmail(email: string): Promise<UserSelected | null> {
-    return this.prisma.user.findUnique({
+  findByEmail(
+    email: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserSelected | null> {
+    return (tx ?? this.prisma).user.findUnique({
       where: { email },
       select: USER_SELECT,
     });

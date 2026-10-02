@@ -1,3 +1,4 @@
+import { IsMinAge } from '@/common/decorators/is-min-age.decorator';
 import { Transform } from 'class-transformer';
 import {
   IsDateString,
@@ -58,11 +59,11 @@ export class RegisterDto {
     { strict: true },
     { message: 'Date of birth must be in a valid YYYY-MM-DD format' },
   )
+  @IsMinAge(18, { message: 'You must be at least 18 years old' })
   dateOfBirth!: string;
 
   @IsString()
-  @Matches(/^\d{12}$/)
-  @Matches(/[0-9]{12}$/, {
+  @Matches(/^\d{12}$/, {
     message: 'National id must be in a valid Vietnamese format',
   })
   nationalId!: string;

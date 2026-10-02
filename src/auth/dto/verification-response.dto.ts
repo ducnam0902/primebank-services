@@ -3,5 +3,4 @@ export class VerificationDto {
   maskedEmail!: string;
   expiresIn!: number;
   resendAfter!: number;
-  message!: string;
 }

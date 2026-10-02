@@ -8,7 +8,7 @@ import { Prisma } from '@/generated/prisma/client';
 import { UserSelected } from '@/users/users.select';
 import { PrismaService } from '@/database/prisma.service';
 
-interface IIssueVerifyOtp {
+export interface IIssueVerifyOtp {
   otp: string;
   authOtps: Otp;
   email: string;
@@ -40,7 +40,7 @@ export class OtpServices {
     const authOtps = await tx.otp.create({
       data: {
         userId: user.id,
-        otpHash: hashOtp(otp),
+        otpHash: hashOtp(otp, this.otpCfg.otpHmacSecret),
         purpose: OtpPurpose.EMAIL_VERIFICATION,
         expiresAt: new Date(Date.now() + this.otpCfg.otpTtlSeconds * 1000),
         attemptCount: 0,
