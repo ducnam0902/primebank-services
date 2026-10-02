@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { generateOtp, hashOtp } from './otp.util';
+import { hashOtp } from './otp.util';
 import { OtpPurpose } from '@/generated/prisma/enums';
 import { Otp } from '@/generated/prisma/client';
 import { otpConfig } from '@/config';
@@ -8,7 +8,7 @@ import { Prisma } from '@/generated/prisma/client';
 import { UserSelected } from '@/users/users.select';
 import { PrismaService } from '@/database/prisma.service';
 
-interface IIssueVerifyOtp {
+export interface IIssueVerifyOtp {
   otp: string;
   authOtps: Otp;
   email: string;
@@ -24,6 +24,7 @@ export class OtpServices {
 
   async issueVerifyOtp(
     user: UserSelected,
+    otp: string,
     tx: Prisma.TransactionClient,
   ): Promise<IIssueVerifyOtp> {
     await tx.otp.updateMany({
@@ -36,11 +37,10 @@ export class OtpServices {
         invalidatedAt: new Date(),
       },
     });
-    const otp = generateOtp();
     const authOtps = await tx.otp.create({
       data: {
         userId: user.id,
-        otpHash: hashOtp(otp),
+        otpHash: hashOtp(otp, this.otpCfg.otpHmacSecret),
         purpose: OtpPurpose.EMAIL_VERIFICATION,
         expiresAt: new Date(Date.now() + this.otpCfg.otpTtlSeconds * 1000),
         attemptCount: 0,

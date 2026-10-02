@@ -1,5 +1,5 @@
-import { maskEmail, safeEqualHex } from './otp/otp.util';
-import { OtpServices } from './otp/otp.service';
+import { generateCifNumber, maskEmail, safeEqualHex } from './otp/otp.util';
+import { IIssueVerifyOtp, OtpServices } from './otp/otp.service';
 import { UsersService } from './../users/users.service';
 import {
   ConflictException,
@@ -34,6 +34,11 @@ import { OtpTooManyAttempts } from '@/common/exceptions/auth/otp-too-many-attemp
 import { OtpInvalid } from '@/common/exceptions/auth/otp-invalid.exception';
 import { OtpResendTooSoon } from '@/common/exceptions/auth/otp-resend-too-soon.exception';
 import { OtpResendLimitReached } from '@/common/exceptions/auth/otp-resend-limit-reached.exception';
+import { EmailAlreadyRegistered } from '@/common/exceptions/auth/email-already-registered.exception';
+import { PhoneAlreadyRegistered } from '@/common/exceptions/auth/phone-already-registered.exception';
+import { NationalIdAlreadyRegistered } from '@/common/exceptions/auth/national-id-already-registered.exception';
+import { USER_SELECT } from '@/users/users.select';
+import { getUniqueConstraintFields } from '@/common/utils/prisma-error.util';
 @Injectable()
 export class AuthService {
   constructor(
@@ -51,110 +56,173 @@ export class AuthService {
     private readonly logger: Logger,
   ) {}
 
+  private static readonly MAX_CIF_RETRIES = 3;
+
   async register(dto: RegisterDto): Promise<VerificationDto> {
     const email = dto.email.toLowerCase().trim();
-    const existingUser = await this.usersService.findByEmail(email);
-    if (existingUser?.status !== UserStatus.PENDING_VERIFICATION) {
-      throw new EmailAlreadyVerified();
-    }
-
-    if (existingUser) {
-      const latest = await this.prisma.otp.findFirst({
-        where: {
-          userId: existingUser.id,
-          purpose: OtpPurpose.EMAIL_VERIFICATION,
-          invalidatedAt: null,
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      });
-
-      if (latest) {
-        const elapsed = Math.floor(
-          (Date.now() - latest.createdAt.getTime()) / 1000,
-        );
-        const remaining = this.otpCfg.otpResendCooldownSeconds - elapsed;
-        if (remaining > 0) {
-          return buildOtpResponse(latest, existingUser.email, remaining);
-        }
-      }
-
-      const result = await this.prisma.$transaction(async (tx) =>
-        this.otpService.issueVerifyOtp(existingUser, tx),
-      );
-
-      await this.emailService.sendVerificationCode({
-        email: existingUser.email,
-        code: result.otp,
-        verificationId: result.authOtps.id,
-        expiresInMinutes: Math.ceil(this.otpCfg.otpTtlSeconds / 60),
-      });
-
-      return buildOtpResponse(
-        result.authOtps,
-        existingUser.email,
-        this.otpCfg.otpResendCooldownSeconds,
-      );
-    }
-
     const passwordHash = await argon2.hash(dto.password, {
       type: argon2.argon2id,
     });
+
+    const result = await this.createCustomerAndIssueOtp(
+      email,
+      passwordHash,
+      dto,
+    );
+
     try {
-      const result = await this.prisma.$transaction(async (tx) => {
-        const user = await this.usersService.create(
-          {
-            email,
-            passwordHash,
-          },
-          tx,
-        );
-
-        await this.customerService.create(
-          {
-            userId: user.id,
-            fullName: dto.fullName,
-            phoneNumber: dto.phoneNumber,
-            dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`),
-            cifNumber: '',
-            nationalId: '',
-            address: '',
-          },
-          tx,
-        );
-        return this.otpService.issueVerifyOtp(user, tx);
-      });
-
       await this.emailService.sendVerificationCode({
         email: result.email,
         code: result.otp,
         verificationId: result.authOtps.id,
         expiresInMinutes: Math.ceil(this.otpCfg.otpTtlSeconds / 60),
       });
-
-      return buildOtpResponse(
-        result.authOtps,
-        result.email,
-        this.otpCfg.otpResendCooldownSeconds,
-      );
-    } catch (error: unknown) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        const target = error.meta?.target;
-        const fields = Array.isArray(target)
-          ? target.join(',')
-          : String(target);
-        throw new ConflictException(
-          fields.includes('email')
-            ? 'Email already in use'
-            : 'Phone number already in use',
-        );
-      }
-      throw error;
+    } catch (error) {
+      this.logger.error('Send email verification failed', {
+        userId: result.authOtps.userId,
+        verificationId: result.authOtps.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
+
+    return buildOtpResponse(
+      result.authOtps,
+      result.email,
+      this.otpCfg.otpResendCooldownSeconds,
+    );
+  }
+
+  private async createCustomerAndIssueOtp(
+    email: string,
+    passwordHash: string,
+    dto: RegisterDto,
+  ): Promise<Awaited<ReturnType<OtpServices['issueVerifyOtp']>>> {
+    for (let attempt = 1; attempt <= AuthService.MAX_CIF_RETRIES; attempt++) {
+      const generatedCifNumber = generateCifNumber();
+      try {
+        const newOtp = generateOtp();
+        return await this.prisma.$transaction(async (tx) => {
+          const reused = await this.reuseUnverifiedUser(
+            tx,
+            email,
+            passwordHash,
+            dto,
+            newOtp,
+          );
+          if (reused) return reused;
+
+          const user = await this.usersService.create(
+            { email, passwordHash },
+            tx,
+          );
+
+          await this.customerService.create(
+            {
+              userId: user.id,
+              fullName: dto.fullName,
+              phoneNumber: dto.phoneNumber,
+              dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`),
+              cifNumber: generatedCifNumber,
+              nationalId: dto.nationalId,
+              address: dto.address,
+            },
+            tx,
+          );
+          return this.otpService.issueVerifyOtp(user, newOtp, tx);
+        });
+      } catch (error: unknown) {
+        if (!(
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        )) {
+          throw error;
+        }
+
+        const fields = getUniqueConstraintFields(error);
+
+        if (fields.includes('cif_number')) {
+          if (attempt < AuthService.MAX_CIF_RETRIES) continue;
+          this.logger.error('CIF number generation exhausted retries', {
+            attempt,
+          });
+          throw new ConflictException(
+            'Unable to generate a unique CIF number, please try again',
+          );
+        }
+        if (fields.includes('email')) throw new EmailAlreadyRegistered();
+        if (fields.includes('phone_number')) throw new PhoneAlreadyRegistered();
+        if (fields.includes('national_id'))
+          throw new NationalIdAlreadyRegistered();
+
+        this.logger.error('Unmapped unique constraint violation on register', {
+          fields,
+        });
+        throw new ConflictException('Duplicate data');
+      }
+    }
+
+    // Unreachable: every loop iteration above either returns or throws.
+    throw new ConflictException(
+      'Unable to generate a unique CIF number, please try again',
+    );
+  }
+
+  private async reuseUnverifiedUser(
+    tx: Prisma.TransactionClient,
+    email: string,
+    passwordHash: string,
+    dto: RegisterDto,
+    otp: string,
+  ): Promise<IIssueVerifyOtp | null> {
+    const existing = await tx.user.findUnique({
+      where: { email },
+      select: { id: true, status: true },
+    });
+    if (existing?.status !== UserStatus.PENDING_VERIFICATION) return null;
+
+    await tx.$queryRaw`
+      SELECT id FROM users WHERE id = ${existing.id}::uuid FOR NO KEY UPDATE
+    `;
+
+    // Same throttling as resendVerification, so re-registering cannot be
+    // used to bypass the OTP rate limits.
+    const recent = await tx.otp.findMany({
+      where: {
+        userId: existing.id,
+        purpose: OtpPurpose.EMAIL_VERIFICATION,
+        createdAt: { gte: new Date(Date.now() - 3600_000) },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true },
+    });
+    if (recent.length > 0) {
+      const waitMs =
+        recent[recent.length - 1].createdAt.getTime() +
+        this.otpCfg.otpResendCooldownSeconds * 1000 -
+        Date.now();
+      if (waitMs > 0) throw new OtpResendTooSoon(Math.ceil(waitMs / 1000));
+    }
+    if (recent.length >= this.otpCfg.otpMaxIssuesPerHour) {
+      const freeAt = recent[0].createdAt.getTime() + 3600_000;
+      throw new OtpResendLimitReached(Math.ceil((freeAt - Date.now()) / 1000));
+    }
+
+    const user = await tx.user.update({
+      where: { id: existing.id },
+      data: { passwordHash },
+      select: USER_SELECT,
+    });
+    await tx.customer.update({
+      where: { userId: existing.id },
+      data: {
+        fullName: dto.fullName,
+        phoneNumber: dto.phoneNumber,
+        dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`),
+        nationalId: dto.nationalId,
+        address: dto.address,
+      },
+    });
+    return this.otpService.issueVerifyOtp(user, otp, tx);
   }
 
   async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResponse> {
@@ -199,7 +267,7 @@ export class AuthService {
       throw new OtpTooManyAttempts();
     }
 
-    const codeHash = hashOtp(code);
+    const codeHash = hashOtp(code, this.otpCfg.otpHmacSecret);
     if (!safeEqualHex(codeHash, existingVerification.otpHash)) {
       throw new OtpInvalid(attemptsLeft);
     }
@@ -249,7 +317,10 @@ export class AuthService {
       throw new EmailAlreadyVerified();
 
     const newOtpGenerated = generateOtp();
-    const hashGeneratedOtp = hashOtp(newOtpGenerated);
+    const hashGeneratedOtp = hashOtp(
+      newOtpGenerated,
+      this.otpCfg.otpHmacSecret,
+    );
 
     const newOtp = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`

@@ -1,5 +1,5 @@
 import { Otp } from '@/generated/prisma/client';
-import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import repeat from 'lodash/repeat';
 
 import { VerificationDto } from '../dto/verification-response.dto';
@@ -8,8 +8,12 @@ export function generateOtp(): string {
   return randomInt(100000, 1000000).toString();
 }
 
-export function hashOtp(otp: string): string {
-  return createHash('sha256').update(otp).digest('hex');
+export function generateCifNumber(): string {
+  return randomInt(1000000000, 10000000000).toString();
+}
+
+export function hashOtp(otp: string, secret: string): string {
+  return createHmac('sha256', secret).update(otp).digest('hex');
 }
 
 export function buildOtpResponse(
@@ -18,7 +22,6 @@ export function buildOtpResponse(
   resendAfter: number,
 ): VerificationDto {
   return {
-    message: 'OTP sent successfully',
     verificationId: record.id,
     maskedEmail: maskEmail(email),
     expiresIn: Math.max(

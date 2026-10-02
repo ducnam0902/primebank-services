@@ -11,7 +11,6 @@ import {
 import { UserNotFound } from '@/common/exceptions/users/user-not-found.exception';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserData } from './dto/create-user.dto';
-import { EmailAlreadyExists } from '@/common/exceptions/auth/email-already-exists.exception';
 
 @Injectable()
 export class UsersService {
@@ -49,8 +48,11 @@ export class UsersService {
     return user;
   }
 
-  async findByEmail(email: string): Promise<UserSelected | null> {
-    const user = await this.usersRepository.findByEmail(email);
+  async findByEmail(
+    email: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserSelected | null> {
+    const user = await this.usersRepository.findByEmail(email, tx);
     return user;
   }
 
@@ -58,9 +60,6 @@ export class UsersService {
     data: CreateUserData,
     tx?: Prisma.TransactionClient,
   ): Promise<UserSelected> {
-    const existing = await this.usersRepository.findByEmail(data.email);
-    if (existing) throw new EmailAlreadyExists();
-
     return this.usersRepository.create({ ...data }, tx);
   }
 
