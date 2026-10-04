@@ -1,44 +1,38 @@
-import { generateCifNumber, maskEmail, safeEqualHex } from './otp/otp.util';
-import { IIssueVerifyOtp, OtpServices } from './otp/otp.service';
-import { UsersService } from './../users/users.service';
 import {
   ConflictException,
-  Injectable,
   ForbiddenException,
   Inject,
+  Injectable,
   Logger,
 } from '@nestjs/common';
-import * as argon2 from 'argon2';
-import { Prisma, OtpPurpose, UserStatus } from '../generated/prisma/client';
-import { PrismaService } from '../database/prisma.service';
-import { RegisterDto } from './dto/register.dto';
 import { JwtService } from '@nestjs/jwt';
+import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'node:crypto';
+import { PrismaService } from '../database/prisma.service';
+import { OtpPurpose, Prisma, UserStatus } from '../generated/prisma/client';
+import { UsersService } from './../users/users.service';
+import { RegisterDto } from './dto/register.dto';
+import { IIssueVerifyOtp, OtpServices } from './otp/otp.service';
+import { generateCifNumber } from './otp/otp.util';
 
-import { EmailService } from '../email/email.service';
-import { VerifyEmailDto } from './dto/verifyEmail.dto';
-import { ResendVerificationDto } from './dto/resend-verification.dto';
-import { jwtConfig, otpConfig } from '../config';
-import type { ConfigType } from '@nestjs/config';
-import { VerificationDto } from './dto/verification-response.dto';
-import { EmailAlreadyVerified } from '@/common/exceptions/auth/email-already-verified.exception';
 import { buildOtpResponse, generateOtp, hashOtp } from '@/auth/otp/otp.util';
-import { CustomersService } from '@/customers/customers.service';
-import { VerifyEmailResponse } from './dto/verify-email.response.dto';
-import { OtpNotFound } from '@/common/exceptions/auth/otp-not-found.exception';
-import {
-  OtpExpired,
-  OtpReason,
-} from '@/common/exceptions/auth/otp-expired.exception';
-import { OtpTooManyAttempts } from '@/common/exceptions/auth/otp-too-many-attempts.exception';
-import { OtpInvalid } from '@/common/exceptions/auth/otp-invalid.exception';
-import { OtpResendTooSoon } from '@/common/exceptions/auth/otp-resend-too-soon.exception';
-import { OtpResendLimitReached } from '@/common/exceptions/auth/otp-resend-limit-reached.exception';
 import { EmailAlreadyRegistered } from '@/common/exceptions/auth/email-already-registered.exception';
-import { PhoneAlreadyRegistered } from '@/common/exceptions/auth/phone-already-registered.exception';
+import { EmailAlreadyVerified } from '@/common/exceptions/auth/email-already-verified.exception';
 import { NationalIdAlreadyRegistered } from '@/common/exceptions/auth/national-id-already-registered.exception';
-import { USER_SELECT } from '@/users/users.select';
+import { OtpResendLimitReached } from '@/common/exceptions/auth/otp-resend-limit-reached.exception';
+import { OtpResendTooSoon } from '@/common/exceptions/auth/otp-resend-too-soon.exception';
+import { PhoneAlreadyRegistered } from '@/common/exceptions/auth/phone-already-registered.exception';
 import { getUniqueConstraintFields } from '@/common/utils/prisma-error.util';
+import { CustomersService } from '@/customers/customers.service';
+import { USER_SELECT } from '@/users/users.select';
+import type { ConfigType } from '@nestjs/config';
+import { jwtConfig, otpConfig } from '../config';
+import { EmailService } from '../email/email.service';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { VerificationDto } from './dto/verification-response.dto';
+import { VerifyEmailResponse } from './dto/verify-email.response.dto';
+import { VerifyEmailDto } from './dto/verifyEmail.dto';
+import { InvalidOrExpiredCode } from '@/common/exceptions/auth/invalid-or-expired-code.exception';
 @Injectable()
 export class AuthService {
   constructor(
@@ -227,49 +221,14 @@ export class AuthService {
 
   async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResponse> {
     const { verificationId, code } = dto;
-    const maxAttempts: number = this.otpCfg.otpMaxAttempts ?? 5;
-    const existingVerification = await this.otpService.findById(verificationId);
-    if (
-      !existingVerification ||
-      existingVerification.purpose !== OtpPurpose.EMAIL_VERIFICATION
-    ) {
-      throw new OtpNotFound();
-    }
+    const existingOtp = await this.otpService.verifyOtp(
+      verificationId,
+      OtpPurpose.EMAIL_VERIFICATION,
+      code,
+    );
 
-    if (existingVerification.consumedAt != null) {
-      throw new OtpExpired(OtpReason.CONSUMED);
-    }
-
-    if (existingVerification.invalidatedAt != null) {
-      throw new OtpExpired(OtpReason.SUPERSEDED);
-    }
-
-    if (existingVerification.expiresAt <= new Date()) {
-      await this.otpService.invalidateAuthOtp(verificationId);
-      throw new OtpExpired(OtpReason.EXPIRED);
-    }
-
-    const authOtpsCount = await this.prisma.otp.update({
-      where: {
-        id: verificationId,
-      },
-      data: {
-        attemptCount: {
-          increment: 1,
-        },
-      },
-    });
-
-    const attemptsLeft = Math.max(0, maxAttempts - authOtpsCount.attemptCount);
-
-    if (authOtpsCount.attemptCount > maxAttempts) {
-      await this.otpService.invalidateAuthOtp(verificationId);
-      throw new OtpTooManyAttempts();
-    }
-
-    const codeHash = hashOtp(code, this.otpCfg.otpHmacSecret);
-    if (!safeEqualHex(codeHash, existingVerification.otpHash)) {
-      throw new OtpInvalid(attemptsLeft);
+    if (existingOtp.user.status !== UserStatus.PENDING_VERIFICATION) {
+      throw new InvalidOrExpiredCode();
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -285,22 +244,25 @@ export class AuthService {
       });
 
       if (consumed.count === 0) {
-        throw new OtpExpired(OtpReason.CONSUMED);
+        throw new InvalidOrExpiredCode();
       }
 
-      const user = await tx.user.update({
+      const verifiedUser = await tx.user.updateMany({
         where: {
-          id: existingVerification.userId,
+          id: existingOtp.userId,
+          status: UserStatus.PENDING_VERIFICATION,
         },
         data: {
           status: UserStatus.ACTIVE,
         },
       });
 
+      if (verifiedUser.count !== 1) {
+        throw new InvalidOrExpiredCode();
+      }
+
       return {
-        verified: true,
-        maskedEmail: maskEmail(user.email),
-        nextStep: 'LOGIN',
+        status: UserStatus.ACTIVE,
       };
     });
   }
@@ -311,7 +273,7 @@ export class AuthService {
     const existedOtp = await this.otpService.findById(dto.verificationId);
 
     if (!existedOtp || existedOtp.purpose !== OtpPurpose.EMAIL_VERIFICATION)
-      throw new OtpNotFound();
+      throw new InvalidOrExpiredCode();
 
     if (existedOtp.user.status !== UserStatus.PENDING_VERIFICATION)
       throw new EmailAlreadyVerified();

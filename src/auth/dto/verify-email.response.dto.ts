@@ -1,5 +1,7 @@
+import { UserStatus } from '@/generated/prisma/enums';
+import { ApiProperty } from '@nestjs/swagger';
+
 export class VerifyEmailResponse {
-  verified!: boolean;
-  maskedEmail!: string;
-  nextStep!: string;
+  @ApiProperty({ enum: UserStatus })
+  status!: UserStatus;
 }
