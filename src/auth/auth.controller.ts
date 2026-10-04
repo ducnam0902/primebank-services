@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Inject,
   Post,
   Req,
@@ -53,6 +55,8 @@ export class AuthController {
   @Public()
   @ApiOperation({ summary: 'Verify email' })
   @ApiOkResponse({ type: VerifyEmailResponse })
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 900_000 } })
   async verifyEmail(@Body() dto: VerifyEmailDto): Promise<VerifyEmailResponse> {
     return this.authService.verifyEmail(dto);
   }

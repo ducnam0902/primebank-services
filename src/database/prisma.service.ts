@@ -24,10 +24,17 @@ export class PrismaService
   ) {
     const adapter = new PrismaPg({
       connectionString: databaseCfg.url,
+      max: 10, // pool size
+      connectionTimeoutMillis: 5_000, // fail clearly instead of hanging forever
+      idleTimeoutMillis: 30_000, // keep warm connections longer (pg default is 10s)
     });
 
     super({
       adapter,
+      transactionOptions: {
+        maxWait: 5_000, // time allowed to acquire a connection + BEGIN (default 2s)
+        timeout: 10_000, // max transaction duration (default 5s)
+      },
       log:
         appCfg.env === 'development'
           ? ['query', 'warn', 'error']
