@@ -83,43 +83,47 @@ export class OtpServices {
     purpose: OtpPurpose,
     code: string,
   ): Promise<Prisma.OtpGetPayload<{ include: { user: true } }>> {
-    const maxAttempts: number = this.otpCfg.otpMaxAttempts ?? 5;
-    const existingOtp = await this.findById(verificationId);
+    const maxAttempts: number = this.otpCfg.otpMaxAttempts;
+    let otp: Prisma.OtpGetPayload<{ include: { user: true } }>;
 
-    if (
-      !existingOtp ||
-      existingOtp.purpose !== purpose ||
-      existingOtp.consumedAt != null ||
-      existingOtp.invalidatedAt != null
-    ) {
-      throw new InvalidOrExpiredCode();
-    }
-
-    if (existingOtp.expiresAt <= new Date()) {
-      await this.invalidateAuthOtp(verificationId);
-      throw new InvalidOrExpiredCode();
-    }
-
-    const codeHash = hashOtp(code, this.otpCfg.otpHmacSecret);
-
-    if (!safeEqualHex(codeHash, existingOtp.otpHash)) {
-      const authOtpsCount = await this.prisma.otp.update({
+    try {
+      otp = await this.prisma.otp.update({
         where: {
           id: verificationId,
+          purpose,
+          consumedAt: null,
+          invalidatedAt: null,
+          expiresAt: {
+            gt: new Date(),
+          },
+          attemptCount: { lt: maxAttempts },
         },
         data: {
           attemptCount: {
             increment: 1,
           },
         },
+        include: {
+          user: true,
+        },
       });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2025'
+      )
+        throw new InvalidOrExpiredCode();
+      throw e;
+    }
 
-      if (authOtpsCount.attemptCount >= maxAttempts) {
+    const codeHash = hashOtp(code, this.otpCfg.otpHmacSecret);
+
+    if (!safeEqualHex(codeHash, otp.otpHash)) {
+      if (otp.attemptCount === maxAttempts) {
         await this.invalidateAuthOtp(verificationId);
         throw new OtpAttemptsExceeded();
-      }
-      throw new InvalidOrExpiredCode();
+      } else throw new InvalidOrExpiredCode();
     }
-    return existingOtp;
+    return otp;
   }
 }
