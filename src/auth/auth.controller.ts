@@ -75,7 +75,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   getCurrentUser(@Req() request: AuthenticatedRequest) {
-    return this.authService.getCurrentUser(request.user.sub);
+    console.log('request.user.sub', request.user.sub);
+    // return this.authService.getCurrentUser(request.user.sub);
   }
 
   private setRefreshTokenCookie(
