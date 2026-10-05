@@ -15,26 +15,33 @@ export function isPrismaKnownError(e: unknown): e is PrismaKnownError {
   );
 }
 
-/**
- * Returns the database column name(s) involved in a P2002 unique constraint
- * violation, e.g. ['email'] or ['phone_number'].
- *
- * With the `@prisma/adapter-pg` driver adapter (used by this project),
- * Prisma does not populate `error.meta.target`; instead the offending
- * column(s) are parsed from the Postgres error detail and placed under
- * `error.meta.driverAdapterError.cause.constraint.fields`. `target` is
- * read as a fallback for engines/adapters that do populate it.
- */
+type DriverCause = {
+  table?: string;
+  constraint?: { fields?: string[]; index?: string };
+};
+
 export function getUniqueConstraintFields(e: PrismaKnownError): string[] {
-  const driverFields = (
-    e.meta?.driverAdapterError as
-      { cause?: { constraint?: { fields?: string[] } } } | undefined
-  )?.cause?.constraint?.fields;
-  if (driverFields?.length) return driverFields;
+  const cause = (
+    e.meta?.driverAdapterError as { cause?: DriverCause } | undefined
+  )?.cause;
+
+  // Prisma 7.9: { fields: ['email'] }
+  if (cause?.constraint?.fields?.length) return cause.constraint.fields;
+
+  // Prisma 7.10+: { index: 'users_email_key' }, table: 'users'
+  const index = cause?.constraint?.index;
+  const table = cause?.table;
+  if (
+    index &&
+    table &&
+    index.startsWith(`${table}_`) &&
+    index.endsWith('_key')
+  ) {
+    return [index.slice(table.length + 1, -'_key'.length)];
+  }
 
   const target = e.meta?.target;
   if (Array.isArray(target)) return target as string[];
   if (typeof target === 'string') return [target];
-
   return [];
 }

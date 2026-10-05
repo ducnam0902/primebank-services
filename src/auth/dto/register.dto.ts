@@ -45,9 +45,11 @@ export class RegisterDto {
       return undefined;
     }
 
-    return typeof input === 'string' ? input.trim() : input;
+    return typeof input === 'string'
+      ? input.replace(/\s+/g, '').replace(/^\+84/, '0')
+      : input;
   })
-  @Matches(/^(?:\+84|0)[0-9]{9}$/, {
+  @Matches(/^0\d{9}$/, {
     message: 'Phone number must be in a valid Vietnamese format',
   })
   phoneNumber!: string;

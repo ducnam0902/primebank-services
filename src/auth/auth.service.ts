@@ -1,30 +1,28 @@
 import {
-  ConflictException,
-  ForbiddenException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
 import { OtpPurpose, Prisma, UserStatus } from '../generated/prisma/client';
 import { UsersService } from './../users/users.service';
 import { RegisterDto } from './dto/register.dto';
-import { IIssueVerifyOtp, OtpServices } from './otp/otp.service';
+import { OtpServices } from './otp/otp.service';
 import { generateCifNumber } from './otp/otp.util';
 
 import { buildOtpResponse, generateOtp, hashOtp } from '@/auth/otp/otp.util';
 import { EmailAlreadyRegistered } from '@/common/exceptions/auth/email-already-registered.exception';
 import { EmailAlreadyVerified } from '@/common/exceptions/auth/email-already-verified.exception';
+import { InvalidOrExpiredCode } from '@/common/exceptions/auth/invalid-or-expired-code.exception';
 import { NationalIdAlreadyRegistered } from '@/common/exceptions/auth/national-id-already-registered.exception';
 import { OtpResendLimitReached } from '@/common/exceptions/auth/otp-resend-limit-reached.exception';
 import { OtpResendTooSoon } from '@/common/exceptions/auth/otp-resend-too-soon.exception';
 import { PhoneAlreadyRegistered } from '@/common/exceptions/auth/phone-already-registered.exception';
 import { getUniqueConstraintFields } from '@/common/utils/prisma-error.util';
 import { CustomersService } from '@/customers/customers.service';
-import { USER_SELECT } from '@/users/users.select';
 import type { ConfigType } from '@nestjs/config';
 import { jwtConfig, otpConfig } from '../config';
 import { EmailService } from '../email/email.service';
@@ -32,7 +30,7 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerificationDto } from './dto/verification-response.dto';
 import { VerifyEmailResponse } from './dto/verify-email.response.dto';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
-import { InvalidOrExpiredCode } from '@/common/exceptions/auth/invalid-or-expired-code.exception';
+import { EmailPendingVerification } from '@/common/exceptions/auth/email-pending-verification.exception';
 @Injectable()
 export class AuthService {
   constructor(
@@ -49,8 +47,6 @@ export class AuthService {
     private readonly otpService: OtpServices,
     private readonly logger: Logger,
   ) {}
-
-  private static readonly MAX_CIF_RETRIES = 3;
 
   async register(dto: RegisterDto): Promise<VerificationDto> {
     const email = dto.email.toLowerCase().trim();
@@ -91,132 +87,60 @@ export class AuthService {
     passwordHash: string,
     dto: RegisterDto,
   ): Promise<Awaited<ReturnType<OtpServices['issueVerifyOtp']>>> {
-    for (let attempt = 1; attempt <= AuthService.MAX_CIF_RETRIES; attempt++) {
-      const generatedCifNumber = generateCifNumber();
-      try {
-        const newOtp = generateOtp();
-        return await this.prisma.$transaction(async (tx) => {
-          const reused = await this.reuseUnverifiedUser(
-            tx,
-            email,
-            passwordHash,
-            dto,
-            newOtp,
-          );
-          if (reused) return reused;
+    const generatedCifNumber = generateCifNumber();
+    try {
+      const newOtp = generateOtp();
+      return await this.prisma.$transaction(async (tx) => {
+        const user = await this.usersService.create(
+          { email, passwordHash },
+          tx,
+        );
 
-          const user = await this.usersService.create(
-            { email, passwordHash },
-            tx,
-          );
-
-          await this.customerService.create(
-            {
-              userId: user.id,
-              fullName: dto.fullName,
-              phoneNumber: dto.phoneNumber,
-              dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`),
-              cifNumber: generatedCifNumber,
-              nationalId: dto.nationalId,
-              address: dto.address,
-            },
-            tx,
-          );
-          return this.otpService.issueVerifyOtp(user, newOtp, tx);
-        });
-      } catch (error: unknown) {
-        if (!(
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002'
-        )) {
-          throw error;
-        }
-
-        const fields = getUniqueConstraintFields(error);
-
-        if (fields.includes('cif_number')) {
-          if (attempt < AuthService.MAX_CIF_RETRIES) continue;
-          this.logger.error('CIF number generation exhausted retries', {
-            attempt,
-          });
-          throw new ConflictException(
-            'Unable to generate a unique CIF number, please try again',
-          );
-        }
-        if (fields.includes('email')) throw new EmailAlreadyRegistered();
-        if (fields.includes('phone_number')) throw new PhoneAlreadyRegistered();
-        if (fields.includes('national_id'))
-          throw new NationalIdAlreadyRegistered();
-
-        this.logger.error('Unmapped unique constraint violation on register', {
-          fields,
-        });
-        throw new ConflictException('Duplicate data');
+        await this.customerService.create(
+          {
+            userId: user.id,
+            fullName: dto.fullName,
+            phoneNumber: dto.phoneNumber,
+            dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`),
+            cifNumber: generatedCifNumber,
+            nationalId: dto.nationalId,
+            address: dto.address,
+          },
+          tx,
+        );
+        return this.otpService.issueVerifyOtp(user, newOtp, tx);
+      });
+    } catch (error: unknown) {
+      if (!(
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      )) {
+        throw error;
       }
+
+      const fields = getUniqueConstraintFields(error);
+      if (fields.includes('email')) {
+        const existedUser = await this.usersService.findByEmail(email);
+        if (
+          existedUser &&
+          existedUser.status === UserStatus.PENDING_VERIFICATION
+        ) {
+          throw new EmailPendingVerification();
+        } else {
+          throw new EmailAlreadyRegistered();
+        }
+      }
+      if (fields.includes('phone_number')) throw new PhoneAlreadyRegistered();
+      if (fields.includes('national_id'))
+        throw new NationalIdAlreadyRegistered();
+
+      this.logger.error('Unmapped unique constraint violation on register', {
+        fields,
+      });
+      throw new InternalServerErrorException(
+        'Registration failed, please try again',
+      );
     }
-
-    // Unreachable: every loop iteration above either returns or throws.
-    throw new ConflictException(
-      'Unable to generate a unique CIF number, please try again',
-    );
-  }
-
-  private async reuseUnverifiedUser(
-    tx: Prisma.TransactionClient,
-    email: string,
-    passwordHash: string,
-    dto: RegisterDto,
-    otp: string,
-  ): Promise<IIssueVerifyOtp | null> {
-    const existing = await tx.user.findUnique({
-      where: { email },
-      select: { id: true, status: true },
-    });
-    if (existing?.status !== UserStatus.PENDING_VERIFICATION) return null;
-
-    await tx.$queryRaw`
-      SELECT id FROM users WHERE id = ${existing.id}::uuid FOR NO KEY UPDATE
-    `;
-
-    // Same throttling as resendVerification, so re-registering cannot be
-    // used to bypass the OTP rate limits.
-    const recent = await tx.otp.findMany({
-      where: {
-        userId: existing.id,
-        purpose: OtpPurpose.EMAIL_VERIFICATION,
-        createdAt: { gte: new Date(Date.now() - 3600_000) },
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { createdAt: true },
-    });
-    if (recent.length > 0) {
-      const waitMs =
-        recent[recent.length - 1].createdAt.getTime() +
-        this.otpCfg.otpResendCooldownSeconds * 1000 -
-        Date.now();
-      if (waitMs > 0) throw new OtpResendTooSoon(Math.ceil(waitMs / 1000));
-    }
-    if (recent.length >= this.otpCfg.otpMaxIssuesPerHour) {
-      const freeAt = recent[0].createdAt.getTime() + 3600_000;
-      throw new OtpResendLimitReached(Math.ceil((freeAt - Date.now()) / 1000));
-    }
-
-    const user = await tx.user.update({
-      where: { id: existing.id },
-      data: { passwordHash },
-      select: USER_SELECT,
-    });
-    await tx.customer.update({
-      where: { userId: existing.id },
-      data: {
-        fullName: dto.fullName,
-        phoneNumber: dto.phoneNumber,
-        dateOfBirth: new Date(`${dto.dateOfBirth}T00:00:00.000Z`),
-        nationalId: dto.nationalId,
-        address: dto.address,
-      },
-    });
-    return this.otpService.issueVerifyOtp(user, otp, tx);
   }
 
   async verifyEmail(dto: VerifyEmailDto): Promise<VerifyEmailResponse> {
@@ -390,53 +314,5 @@ export class AuthService {
       existedOtp.user.email,
       this.otpCfg.otpResendCooldownSeconds,
     );
-  }
-
-  async getCurrentUser(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        status: true,
-        customer: {
-          select: {
-            id: true,
-            fullName: true,
-            phoneNumber: true,
-            dateOfBirth: true,
-          },
-        },
-      },
-    });
-
-    if (!user || user.status !== 'ACTIVE') {
-      throw new ForbiddenException('Tài khoản của bạn đã bị vô hiệu hóa');
-    }
-
-    return user;
-  }
-
-  private generateRefreshToken(): string {
-    return randomBytes(48).toString('base64url');
-  }
-
-  private hashRefreshToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
-  }
-
-  private getRefreshTokenExpiresAt(): Date {
-    const ttlDays = Number(this.jwtCfg.refreshExpiresIn) || 7;
-
-    if (!Number.isFinite(ttlDays) || ttlDays <= 0) {
-      throw new Error('REFRESH_TOKEN_TTL_DAYS must be a positive number');
-    }
-
-    return new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000); // Convert days to milliseconds
-  }
-
-  private getAccessTokenTtlSeconds(): number {
-    return Number(this.jwtCfg.accessExpiresIn) || 900; // Default to 15 minutes
   }
 }
