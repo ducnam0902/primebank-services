@@ -1,5 +1,5 @@
 import { PrismaService } from '@/database/prisma.service';
-import { Prisma } from '@/generated/prisma/client';
+import { Prisma, UserStatus } from '@/generated/prisma/client';
 import { Injectable } from '@nestjs/common';
 import { USER_SELECT, UserSelected } from './users.select';
 
@@ -58,5 +58,16 @@ export class UserRepository {
       data,
       select: USER_SELECT,
     });
+  }
+
+  async lockForUpdate(
+    id: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<{ status: UserStatus } | null> {
+    const rows = await tx.$queryRaw<{ status: UserStatus }[]>`
+      SELECT status FROM users WHERE id = ${id}::uuid FOR NO KEY UPDATE
+    `;
+
+    return rows[0] ?? null;
   }
 }

@@ -5,7 +5,7 @@ import repeat from 'lodash/repeat';
 import { VerificationDto } from '../dto/verification-response.dto';
 
 export function generateOtp(): string {
-  return randomInt(100000, 1000000).toString();
+  return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
 export function generateCifNumber(): string {

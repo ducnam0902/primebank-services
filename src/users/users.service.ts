@@ -72,4 +72,11 @@ export class UsersService {
     await this.findOne(id);
     return this.usersRepository.update(id, { status });
   }
+
+  async lockForUpdate(
+    id: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<{ status: UserStatus } | null> {
+    return this.usersRepository.lockForUpdate(id, tx);
+  }
 }

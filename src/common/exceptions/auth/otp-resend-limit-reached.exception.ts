@@ -6,7 +6,7 @@ export class OtpResendLimitReached extends BaseException {
   constructor(retryAfter: number) {
     super(
       ErrorCode.OTP_RESEND_LIMIT_REACHED,
-      'Otp ressend reached limited',
+      'Otp resend reached limited',
       HttpStatus.TOO_MANY_REQUESTS,
       {
         retryAfter,
