@@ -6,8 +6,8 @@ import { otpConfig } from '@/config';
 import type { ConfigType } from '@nestjs/config';
 import { Prisma } from '@/generated/prisma/client';
 import { PrismaService } from '@/database/prisma.service';
-import { InvalidOrExpiredCode } from '@/common/exceptions/auth/invalid-or-expired-code.exception';
-import { OtpAttemptsExceeded } from '@/common/exceptions/auth/otp-attempts-exceeded.exception';
+import { InvalidOrExpiredCode } from '@/common/exceptions/otp/invalid-or-expired-code.exception';
+import { OtpAttemptsExceeded } from '@/common/exceptions/otp/otp-attempts-exceeded.exception';
 import { UsersService } from '@/users/users.service';
 
 export type IssueOtpResult =
@@ -165,5 +165,17 @@ export class OtpServices {
       },
     });
     return { issued: true, otp: newOtpRecord, code: newOtpGenerated };
+  }
+
+  async findLatestId(
+    userId: string,
+    purpose: OtpPurpose,
+  ): Promise<string | null> {
+    const latest = await this.prisma.otp.findFirst({
+      where: { userId, purpose },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    return latest?.id ?? null;
   }
 }

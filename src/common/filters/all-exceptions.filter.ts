@@ -102,7 +102,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       case 'P2002': // unique constraint
         return {
           statusCode: HttpStatus.CONFLICT,
-          errorCode: ErrorCode.EMAIL_ALREADY_REGISTERED,
+          errorCode: ErrorCode.CONFLICT,
           message: 'Data already exists',
           details: undefined,
         };
@@ -123,14 +123,23 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
   }
 
-  private mapHttpStatus(status: number): string {
-    if (status === Number(HttpStatus.UNAUTHORIZED))
-      return ErrorCode.UNAUTHORIZED;
-    if (status === Number(HttpStatus.NOT_FOUND))
-      return ErrorCode.RESOURCE_NOT_FOUND;
-    if (status === Number(HttpStatus.TOO_MANY_REQUESTS))
-      return ErrorCode.TOO_MANY_REQUESTS;
-    return ErrorCode.INTERNAL_ERROR;
+  private mapHttpStatus(status: HttpStatus): string {
+    switch (status) {
+      case HttpStatus.BAD_REQUEST:
+        return ErrorCode.BAD_REQUEST;
+      case HttpStatus.UNAUTHORIZED:
+        return ErrorCode.UNAUTHORIZED;
+      case HttpStatus.FORBIDDEN:
+        return ErrorCode.FORBIDDEN;
+      case HttpStatus.NOT_FOUND:
+        return ErrorCode.RESOURCE_NOT_FOUND;
+      case HttpStatus.TOO_MANY_REQUESTS:
+        return ErrorCode.TOO_MANY_REQUESTS;
+      case HttpStatus.CONFLICT:
+        return ErrorCode.CONFLICT;
+      default:
+        return ErrorCode.INTERNAL_ERROR;
+    }
   }
 
   private log(exception: unknown, body: ErrorResponse, request: Request): void {
