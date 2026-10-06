@@ -135,6 +135,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
         return ErrorCode.RESOURCE_NOT_FOUND;
       case HttpStatus.TOO_MANY_REQUESTS:
         return ErrorCode.TOO_MANY_REQUESTS;
+      case HttpStatus.CONFLICT:
+        return ErrorCode.CONFLICT;
       default:
         return ErrorCode.INTERNAL_ERROR;
     }
