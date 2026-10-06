@@ -6,7 +6,7 @@ export class OtpResendTooSoon extends BaseException {
   constructor(retryAfter: number) {
     super(
       ErrorCode.OTP_RESEND_TOO_SOON,
-      'Otp ressend too soon',
+      'Otp resend too soon',
       HttpStatus.TOO_MANY_REQUESTS,
       {
         retryAfter,
