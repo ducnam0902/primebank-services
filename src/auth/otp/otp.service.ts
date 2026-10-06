@@ -166,4 +166,16 @@ export class OtpServices {
     });
     return { issued: true, otp: newOtpRecord, code: newOtpGenerated };
   }
+
+  async findLatestId(
+    userId: string,
+    purpose: OtpPurpose,
+  ): Promise<string | null> {
+    const latest = await this.prisma.otp.findFirst({
+      where: { userId, purpose },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    return latest?.id ?? null;
+  }
 }

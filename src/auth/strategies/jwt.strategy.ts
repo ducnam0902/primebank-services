@@ -10,13 +10,13 @@ import { UserStatus } from '@/generated/prisma/enums';
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     @Inject(jwtConfig.KEY)
-    private readonly jwtCfg: ConfigType<typeof jwtConfig>,
+    jwtCfg: ConfigType<typeof jwtConfig>,
     private readonly prisma: PrismaService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         ExtractJwt.fromAuthHeaderAsBearerToken(),
-        (req: Request) => req.headers.get('access_token') ?? null,
+        ExtractJwt.fromHeader('access_token'),
       ]),
       ignoreExpiration: false,
       secretOrKey: jwtCfg.accessSecret,

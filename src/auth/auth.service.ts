@@ -133,7 +133,11 @@ export class AuthService {
           existedUser &&
           existedUser.status === UserStatus.PENDING_VERIFICATION
         ) {
-          throw new EmailPendingVerification();
+          const verificationId = await this.otpService.findLatestId(
+            existedUser.id,
+            OtpPurpose.EMAIL_VERIFICATION,
+          );
+          throw new EmailPendingVerification(verificationId);
         } else {
           throw new EmailAlreadyRegistered();
         }
