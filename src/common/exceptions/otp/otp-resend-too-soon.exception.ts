@@ -3,13 +3,13 @@ import { BaseException } from '../base.exception';
 import { ErrorCode } from '@/common/constants/error-codes.constant';
 
 export class OtpResendTooSoon extends BaseException {
-  constructor(retryAfter: number) {
+  constructor(retryAfterSeconds: number) {
     super(
       ErrorCode.OTP_RESEND_TOO_SOON,
       'Otp resend too soon',
       HttpStatus.TOO_MANY_REQUESTS,
       {
-        retryAfter,
+        retryAfterSeconds,
       },
     );
   }

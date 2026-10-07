@@ -4,7 +4,6 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../database/prisma.service';
 import { OtpPurpose, Prisma, UserStatus } from '../generated/prisma/client';
@@ -24,7 +23,7 @@ import { PhoneAlreadyRegistered } from '@/common/exceptions/auth/phone-already-r
 import { getUniqueConstraintFields } from '@/common/utils/prisma-error.util';
 import { CustomersService } from '@/customers/customers.service';
 import type { ConfigType } from '@nestjs/config';
-import { jwtConfig, otpConfig } from '../config';
+import { otpConfig } from '../config';
 import { EmailService } from '../email/email.service';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerificationDto } from './dto/verification-response.dto';
@@ -35,8 +34,6 @@ import { assertNever } from '@/common/utils/assert-never.util';
 @Injectable()
 export class AuthService {
   constructor(
-    @Inject(jwtConfig.KEY)
-    private readonly jwtCfg: ConfigType<typeof jwtConfig>,
     @Inject(otpConfig.KEY)
     private readonly otpCfg: ConfigType<typeof otpConfig>,
 
@@ -44,7 +41,7 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly usersService: UsersService,
     private readonly customerService: CustomersService,
-    private readonly jwtService: JwtService,
+
     private readonly otpService: OtpServices,
     private readonly logger: Logger,
   ) {}
