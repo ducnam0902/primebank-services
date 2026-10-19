@@ -26,3 +26,7 @@ export const USER_AUTH_SELECT = {
 export type UserSelected = Prisma.UserGetPayload<{
   select: typeof USER_SELECT;
 }>;
+
+export type UserAuthSelected = Prisma.UserGetPayload<{
+  select: typeof USER_AUTH_SELECT;
+}>;

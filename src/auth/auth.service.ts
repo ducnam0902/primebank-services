@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../database/prisma.service';
@@ -31,8 +32,13 @@ import { VerifyEmailResponse } from './dto/verify-email.response.dto';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
 import { EmailPendingVerification } from '@/common/exceptions/auth/email-pending-verification.exception';
 import { assertNever } from '@/common/utils/assert-never.util';
+import { LoginDto } from './dto/login.dto';
+import { IssuedTokens, TokenService } from './token/token.service';
+import { InvalidCredentialsException } from '@/common/exceptions/auth/invalid-credentials.exception';
+import { AccountLockedException } from '@/common/exceptions/auth/account-locked.exception';
+import { EmailNotVerified } from '@/common/exceptions/auth/email-not-verified.exception';
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   constructor(
     @Inject(otpConfig.KEY)
     private readonly otpCfg: ConfigType<typeof otpConfig>,
@@ -41,10 +47,19 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly usersService: UsersService,
     private readonly customerService: CustomersService,
+    private readonly tokenService: TokenService,
 
     private readonly otpService: OtpServices,
     private readonly logger: Logger,
   ) {}
+
+  private dummyHash!: string;
+
+  async onModuleInit(): Promise<void> {
+    this.dummyHash = await argon2.hash('timing-equaliser', {
+      type: argon2.argon2id,
+    });
+  }
 
   async register(dto: RegisterDto): Promise<VerificationDto> {
     const email = dto.email.toLowerCase().trim();
@@ -255,5 +270,40 @@ export class AuthService {
       existedOtp.user.email,
       this.otpCfg.otpResendCooldownSeconds,
     );
+  }
+
+  async login(dto: LoginDto): Promise<IssuedTokens> {
+    const existedUser = await this.usersService.findByEmailForLogin(dto.email);
+    if (!existedUser) {
+      await argon2.verify(this.dummyHash, dto.password);
+      throw new InvalidCredentialsException();
+    }
+
+    const isPasswordValid = await argon2.verify(
+      existedUser.passwordHash,
+      dto.password,
+    );
+
+    if (!isPasswordValid) {
+      throw new InvalidCredentialsException();
+    }
+
+    if (existedUser.status === UserStatus.PENDING_VERIFICATION) {
+      const latestId = await this.otpService.findLatestId(
+        existedUser.id,
+        OtpPurpose.EMAIL_VERIFICATION,
+      );
+      throw new EmailNotVerified(latestId);
+    }
+
+    if (existedUser.status === UserStatus.LOCKED) {
+      throw new AccountLockedException();
+    }
+
+    return this.tokenService.issue({
+      id: existedUser.id,
+      email: existedUser.email,
+      role: existedUser.role,
+    });
   }
 }

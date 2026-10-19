@@ -18,7 +18,7 @@ export interface IssuedTokens {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
-export class OtpServices {
+export class TokenService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,

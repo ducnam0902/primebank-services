@@ -1,7 +1,12 @@
 import { PrismaService } from '@/database/prisma.service';
 import { Prisma, UserStatus } from '@/generated/prisma/client';
 import { Injectable } from '@nestjs/common';
-import { USER_SELECT, UserSelected } from './users.select';
+import {
+  USER_AUTH_SELECT,
+  USER_SELECT,
+  UserAuthSelected,
+  UserSelected,
+} from './users.select';
 
 interface FindManyParams {
   where?: Prisma.UserWhereInput;
@@ -69,5 +74,15 @@ export class UserRepository {
     `;
 
     return rows[0] ?? null;
+  }
+
+  findByEmailForLogin(
+    email: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserAuthSelected | null> {
+    return (tx ?? this.prisma).user.findUnique({
+      where: { email },
+      select: USER_AUTH_SELECT,
+    });
   }
 }
