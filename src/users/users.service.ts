@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { UserRepository } from './users.repository';
 import { FindUsersQueryDto } from './dto/find-users-query.dto';
 import { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
-import { UserSelected } from './users.select';
+import { UserSelected, UserAuthSelected } from './users.select';
 import {
   buildPaginatedResult,
   getPrismaPagination,
@@ -78,5 +78,9 @@ export class UsersService {
     tx: Prisma.TransactionClient,
   ): Promise<{ status: UserStatus } | null> {
     return this.usersRepository.lockForUpdate(id, tx);
+  }
+
+  async findByEmailForLogin(email: string): Promise<UserAuthSelected | null> {
+    return this.usersRepository.findByEmailForLogin(email);
   }
 }
