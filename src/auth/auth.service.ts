@@ -14,29 +14,30 @@ import { IssueOtpResult, OtpServices } from './otp/otp.service';
 import { generateCifNumber } from './otp/otp.util';
 
 import { buildOtpResponse } from '@/auth/otp/otp.util';
+import { AccountLockedException } from '@/common/exceptions/auth/account-locked.exception';
 import { EmailAlreadyRegistered } from '@/common/exceptions/auth/email-already-registered.exception';
 import { EmailAlreadyVerified } from '@/common/exceptions/auth/email-already-verified.exception';
-import { InvalidOrExpiredCode } from '@/common/exceptions/otp/invalid-or-expired-code.exception';
+import { EmailNotVerified } from '@/common/exceptions/auth/email-not-verified.exception';
+import { EmailPendingVerification } from '@/common/exceptions/auth/email-pending-verification.exception';
+import { InvalidCredentialsException } from '@/common/exceptions/auth/invalid-credentials.exception';
 import { NationalIdAlreadyRegistered } from '@/common/exceptions/auth/national-id-already-registered.exception';
+import { PhoneAlreadyRegistered } from '@/common/exceptions/auth/phone-already-registered.exception';
+import { InvalidOrExpiredCode } from '@/common/exceptions/otp/invalid-or-expired-code.exception';
 import { OtpResendLimitReached } from '@/common/exceptions/otp/otp-resend-limit-reached.exception';
 import { OtpResendTooSoon } from '@/common/exceptions/otp/otp-resend-too-soon.exception';
-import { PhoneAlreadyRegistered } from '@/common/exceptions/auth/phone-already-registered.exception';
+import { assertNever } from '@/common/utils/assert-never.util';
 import { getUniqueConstraintFields } from '@/common/utils/prisma-error.util';
 import { CustomersService } from '@/customers/customers.service';
 import type { ConfigType } from '@nestjs/config';
 import { otpConfig } from '../config';
 import { EmailService } from '../email/email.service';
+import { LoginDto } from './dto/login.dto';
+import { MeResponseDto } from './dto/me-response.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerificationDto } from './dto/verification-response.dto';
 import { VerifyEmailResponse } from './dto/verify-email.response.dto';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
-import { EmailPendingVerification } from '@/common/exceptions/auth/email-pending-verification.exception';
-import { assertNever } from '@/common/utils/assert-never.util';
-import { LoginDto } from './dto/login.dto';
 import { IssuedTokens, TokenService } from './token/token.service';
-import { InvalidCredentialsException } from '@/common/exceptions/auth/invalid-credentials.exception';
-import { AccountLockedException } from '@/common/exceptions/auth/account-locked.exception';
-import { EmailNotVerified } from '@/common/exceptions/auth/email-not-verified.exception';
 @Injectable()
 export class AuthService implements OnModuleInit {
   constructor(
@@ -305,5 +306,9 @@ export class AuthService implements OnModuleInit {
       email: existedUser.email,
       role: existedUser.role,
     });
+  }
+
+  async getCurrentUser(id: string): Promise<MeResponseDto> {
+    return this.usersService.findProfile(id);
   }
 }

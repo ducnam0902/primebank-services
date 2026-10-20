@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { UserRepository } from './users.repository';
 import { FindUsersQueryDto } from './dto/find-users-query.dto';
 import { PaginatedResult } from '@/common/interfaces/paginated-result.interface';
-import { UserSelected, UserAuthSelected } from './users.select';
+import { UserSelected, UserAuthSelected, UserProfile } from './users.select';
 import {
   buildPaginatedResult,
   getPrismaPagination,
@@ -82,5 +82,13 @@ export class UsersService {
 
   async findByEmailForLogin(email: string): Promise<UserAuthSelected | null> {
     return this.usersRepository.findByEmailForLogin(email);
+  }
+
+  async findProfile(id: string): Promise<UserProfile> {
+    const user = await this.usersRepository.findProfileById(id);
+    if (!user) {
+      throw new UserNotFound();
+    }
+    return user;
   }
 }
