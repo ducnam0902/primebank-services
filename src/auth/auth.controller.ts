@@ -1,3 +1,5 @@
+import { ApiSuccessResponse } from '@/common/decorators/api-success-response.decorator';
+import { appConfig } from '@/config';
 import {
   Body,
   Controller,
@@ -6,35 +8,33 @@ import {
   HttpStatus,
   Inject,
   Post,
-  Req,
   Res,
-  UseGuards,
 } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import {
+  ApiBearerAuth,
   ApiBody,
   ApiOkResponse,
   ApiOperation,
   ApiResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { AuthService } from './auth.service';
 import type { Response } from 'express';
+import { AuthService } from './auth.service';
+import {
+  REFRESH_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE_PATH,
+} from './constants/auth.constants';
+import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
+import { LoginResponseDto } from './dto/login-response.dto';
+import { LoginDto } from './dto/login.dto';
+import { MeResponseDto } from './dto/me-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerificationDto } from './dto/verification-response.dto';
 import { VerifyEmailResponse } from './dto/verify-email.response.dto';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import type { AuthenticatedRequest } from './types/authenticated-request.type';
-import { LoginDto } from './dto/login.dto';
-import { LoginResponseDto } from './dto/login-response.dto';
-import {
-  REFRESH_TOKEN_COOKIE,
-  REFRESH_TOKEN_COOKIE_PATH,
-} from './constants/auth.constants';
-import { appConfig } from '@/config';
-import type { ConfigType } from '@nestjs/config';
 
 @Controller('auth')
 export class AuthController {
@@ -91,11 +91,12 @@ export class AuthController {
     return { accessToken: token.accessToken };
   }
 
-  @UseGuards(JwtAuthGuard)
   @Get('me')
-  getCurrentUser(@Req() request: AuthenticatedRequest) {
-    console.log('request.user.sub', request.user.sub);
-    // return this.authService.getCurrentUser(request.user.sub);
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Current user' })
+  @ApiSuccessResponse(MeResponseDto)
+  getCurrentUser(@CurrentUser('id') id: string): Promise<MeResponseDto> {
+    return this.authService.getCurrentUser(id);
   }
 
   private setRefreshTokenCookie(

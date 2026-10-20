@@ -30,3 +30,23 @@ export type UserSelected = Prisma.UserGetPayload<{
 export type UserAuthSelected = Prisma.UserGetPayload<{
   select: typeof USER_AUTH_SELECT;
 }>;
+
+export const USER_PROFILE_SELECT = {
+  id: true,
+  email: true,
+  role: true,
+  status: true,
+  customer: {
+    select: {
+      cifNumber: true,
+      fullName: true,
+      phoneNumber: true,
+      dateOfBirth: true,
+      address: true,
+    },
+  },
+} satisfies Prisma.UserSelect;
+
+export type UserProfile = Prisma.UserGetPayload<{
+  select: typeof USER_PROFILE_SELECT;
+}>;

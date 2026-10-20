@@ -3,8 +3,10 @@ import { Prisma, UserStatus } from '@/generated/prisma/client';
 import { Injectable } from '@nestjs/common';
 import {
   USER_AUTH_SELECT,
+  USER_PROFILE_SELECT,
   USER_SELECT,
   UserAuthSelected,
+  UserProfile,
   UserSelected,
 } from './users.select';
 
@@ -83,6 +85,16 @@ export class UserRepository {
     return (tx ?? this.prisma).user.findUnique({
       where: { email },
       select: USER_AUTH_SELECT,
+    });
+  }
+
+  findProfileById(
+    id: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<UserProfile | null> {
+    return (tx ?? this.prisma).user.findUnique({
+      where: { id },
+      select: USER_PROFILE_SELECT,
     });
   }
 }
