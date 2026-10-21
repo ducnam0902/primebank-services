@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Inject,
   Post,
+  Req,
   Res,
 } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
@@ -21,10 +22,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
-import {
-  REFRESH_TOKEN_COOKIE,
-  REFRESH_TOKEN_COOKIE_PATH,
-} from './constants/auth.constants';
+import { REFRESH_TOKEN_COOKIE } from './constants/auth.constants';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import { LoginResponseDto } from './dto/login-response.dto';
@@ -35,6 +33,8 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { VerificationDto } from './dto/verification-response.dto';
 import { VerifyEmailResponse } from './dto/verify-email.response.dto';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
+import type { CookieRequest } from './types/cookie-request.type';
+import { InvalidRefreshTokenException } from '@/common/exceptions/auth/invalid-refresh-token.exception';
 
 @Controller('auth')
 export class AuthController {
@@ -99,6 +99,40 @@ export class AuthController {
     return this.authService.getCurrentUser(id);
   }
 
+  @Post('refresh')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Refresh the session' })
+  @ApiOkResponse({ type: LoginResponseDto })
+  async refresh(
+    @Req() req: CookieRequest,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponseDto> {
+    try {
+      const raw = req.cookies[REFRESH_TOKEN_COOKIE];
+      if (typeof raw !== 'string' || raw === '') {
+        throw new InvalidRefreshTokenException();
+      }
+
+      const token = await this.authService.refresh(raw);
+      this.setRefreshTokenCookie(
+        res,
+        token.refreshToken,
+        token.refreshExpiresAt,
+      );
+      return { accessToken: token.accessToken };
+    } catch (e) {
+      if (e instanceof InvalidRefreshTokenException) {
+        this.clearRefreshTokenCookie(res);
+      }
+      throw e;
+    }
+  }
+
+  private getRefreshCookiePath(): string {
+    return `${this.appCfg.apiPrefix}/auth`;
+  }
+
   private setRefreshTokenCookie(
     res: Response,
     token: string,
@@ -108,7 +142,7 @@ export class AuthController {
       httpOnly: true,
       secure: this.appCfg.env === 'production',
       sameSite: 'lax',
-      path: REFRESH_TOKEN_COOKIE_PATH,
+      path: this.getRefreshCookiePath(),
       expires: expiresAt,
     });
   }
@@ -118,7 +152,7 @@ export class AuthController {
       httpOnly: true,
       secure: this.appCfg.env === 'production',
       sameSite: 'lax',
-      path: REFRESH_TOKEN_COOKIE_PATH,
+      path: this.getRefreshCookiePath(),
     });
   }
 }

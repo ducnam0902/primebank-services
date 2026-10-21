@@ -311,4 +311,8 @@ export class AuthService implements OnModuleInit {
   async getCurrentUser(id: string): Promise<MeResponseDto> {
     return this.usersService.findProfile(id);
   }
+
+  refresh(rawRefreshToken: string): Promise<IssuedTokens> {
+    return this.tokenService.rotate(rawRefreshToken);
+  }
 }
