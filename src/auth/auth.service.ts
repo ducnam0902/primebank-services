@@ -312,7 +312,11 @@ export class AuthService implements OnModuleInit {
     return this.usersService.findProfile(id);
   }
 
-  refresh(rawRefreshToken: string): Promise<IssuedTokens> {
+  async refresh(rawRefreshToken: string): Promise<IssuedTokens> {
     return this.tokenService.rotate(rawRefreshToken);
+  }
+
+  async logout(rawRefreshToken: string): Promise<void> {
+    return this.tokenService.revoke(rawRefreshToken);
   }
 }

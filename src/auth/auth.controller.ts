@@ -129,6 +129,24 @@ export class AuthController {
     }
   }
 
+  @Post('logout')
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Log out' })
+  async logout(
+    @Req() req: CookieRequest,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    try {
+      const raw = req.cookies[REFRESH_TOKEN_COOKIE];
+      if (typeof raw === 'string' && raw !== '') {
+        await this.authService.logout(raw);
+      }
+    } finally {
+      this.clearRefreshTokenCookie(res);
+    }
+  }
+
   private getRefreshCookiePath(): string {
     return `${this.appCfg.apiPrefix}/auth`;
   }
