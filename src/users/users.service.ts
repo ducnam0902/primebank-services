@@ -91,4 +91,33 @@ export class UsersService {
     }
     return user;
   }
+
+  async recordFailedLogin(
+    userId: string,
+    max: number,
+    lockMinutes: number,
+  ): Promise<{ lockedUntil: Date | null }> {
+    const user = await this.usersRepository.update(userId, {
+      failedLoginAttempts: { increment: 1 },
+    });
+
+    if (user.failedLoginAttempts >= max) {
+      const lockedUntil = new Date();
+      lockedUntil.setMinutes(lockedUntil.getMinutes() + lockMinutes);
+      await this.usersRepository.update(userId, {
+        failedLoginAttempts: 0,
+        lockedUntil,
+      });
+      return { lockedUntil };
+    }
+
+    return { lockedUntil: null };
+  }
+
+  async resetFailedLogins(userId: string): Promise<void> {
+    await this.usersRepository.update(userId, {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    });
+  }
 }
