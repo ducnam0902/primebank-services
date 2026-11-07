@@ -29,7 +29,7 @@ import { assertNever } from '@/common/utils/assert-never.util';
 import { getUniqueConstraintFields } from '@/common/utils/prisma-error.util';
 import { CustomersService } from '@/customers/customers.service';
 import type { ConfigType } from '@nestjs/config';
-import { otpConfig } from '../config';
+import { authConfig, otpConfig } from '../config';
 import { EmailService } from '../email/email.service';
 import { LoginDto } from './dto/login.dto';
 import { MeResponseDto } from './dto/me-response.dto';
@@ -43,6 +43,8 @@ export class AuthService implements OnModuleInit {
   constructor(
     @Inject(otpConfig.KEY)
     private readonly otpCfg: ConfigType<typeof otpConfig>,
+    @Inject(authConfig.KEY)
+    private readonly authCfg: ConfigType<typeof authConfig>,
 
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
@@ -275,6 +277,14 @@ export class AuthService implements OnModuleInit {
 
   async login(dto: LoginDto): Promise<IssuedTokens> {
     const existedUser = await this.usersService.findByEmailForLogin(dto.email);
+    if (
+      existedUser?.lockedUntil &&
+      existedUser.lockedUntil.getTime() > Date.now()
+    ) {
+      throw new AccountLockedException(
+        Math.ceil((existedUser.lockedUntil.getTime() - Date.now()) / 1000),
+      );
+    }
     if (!existedUser) {
       await argon2.verify(this.dummyHash, dto.password);
       throw new InvalidCredentialsException();
@@ -286,7 +296,23 @@ export class AuthService implements OnModuleInit {
     );
 
     if (!isPasswordValid) {
-      throw new InvalidCredentialsException();
+      const lockUntil = await this.usersService.recordFailedLogin(
+        existedUser.id,
+        this.authCfg.loginMaxFailedAttempts,
+        this.authCfg.loginLockMinutes,
+      );
+
+      if (lockUntil?.lockedUntil) {
+        throw new AccountLockedException(
+          Math.ceil((lockUntil.lockedUntil.getTime() - Date.now()) / 1000),
+        );
+      } else {
+        throw new InvalidCredentialsException();
+      }
+    }
+
+    if (existedUser.failedLoginAttempts > 0) {
+      await this.usersService.resetFailedLogins(existedUser.id);
     }
 
     if (existedUser.status === UserStatus.PENDING_VERIFICATION) {

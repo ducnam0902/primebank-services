@@ -3,7 +3,12 @@ import { BaseException } from '../base.exception';
 import { ErrorCode } from '@/common/constants/error-codes.constant';
 
 export class AccountLockedException extends BaseException {
-  constructor() {
-    super(ErrorCode.ACCOUNT_LOCKED, 'Account Locked', HttpStatus.LOCKED);
+  constructor(retryAfterSeconds?: number) {
+    super(
+      ErrorCode.ACCOUNT_LOCKED,
+      'Account Locked',
+      HttpStatus.LOCKED,
+      retryAfterSeconds === undefined ? undefined : { retryAfterSeconds },
+    );
   }
 }

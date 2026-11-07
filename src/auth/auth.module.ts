@@ -4,7 +4,7 @@ import { Logger, Module } from '@nestjs/common';
 import { ConfigModule, ConfigType } from '@nestjs/config';
 import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { jwtConfig, otpConfig } from '../config';
+import { authConfig, jwtConfig, otpConfig } from '../config';
 import { DatabaseModule } from '../database/database.module';
 import { EmailModule } from '../email/email.module';
 import { AuthController } from './auth.controller';
@@ -21,6 +21,7 @@ import { TokenService } from './token/token.service';
     CustomersModule,
     ConfigModule.forFeature(jwtConfig),
     ConfigModule.forFeature(otpConfig),
+    ConfigModule.forFeature(authConfig),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule.forFeature(jwtConfig)],
