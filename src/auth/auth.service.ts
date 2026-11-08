@@ -11,7 +11,7 @@ import { OtpPurpose, Prisma, UserStatus } from '../generated/prisma/client';
 import { UsersService } from './../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { IssueOtpResult, OtpServices } from './otp/otp.service';
-import { generateCifNumber } from './otp/otp.util';
+import { buildDecoyResponse, generateCifNumber } from './otp/otp.util';
 
 import { buildOtpResponse } from '@/auth/otp/otp.util';
 import { AccountLockedException } from '@/common/exceptions/auth/account-locked.exception';
@@ -38,6 +38,7 @@ import { VerificationDto } from './dto/verification-response.dto';
 import { VerifyEmailResponse } from './dto/verify-email.response.dto';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
 import { IssuedTokens, TokenService } from './token/token.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 @Injectable()
 export class AuthService implements OnModuleInit {
   constructor(
@@ -332,6 +333,60 @@ export class AuthService implements OnModuleInit {
       email: existedUser.email,
       role: existedUser.role,
     });
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto): Promise<VerificationDto> {
+    const existedUser = await this.usersService.findByEmail(dto.email);
+    if (!existedUser || existedUser.status !== UserStatus.ACTIVE) {
+      return buildDecoyResponse(
+        dto.email,
+        this.otpCfg.otpTtlSeconds,
+        this.otpCfg.otpResendCooldownSeconds,
+      );
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      return this.otpService.issue(
+        existedUser.id,
+        OtpPurpose.PASSWORD_RESET,
+        tx,
+      );
+    });
+
+    if (result.issued === false) {
+      return result.otp
+        ? buildOtpResponse(
+            result.otp,
+            existedUser.email,
+            result.retryAfterSeconds,
+          )
+        : buildDecoyResponse(
+            dto.email,
+            this.otpCfg.otpTtlSeconds,
+            result.retryAfterSeconds,
+          );
+    }
+
+    try {
+      await this.emailService.sendPasswordResetCode({
+        email: existedUser.email,
+        code: result.code,
+        verificationId: result.otp.id,
+        expiresInMinutes: Math.ceil(this.otpCfg.otpTtlSeconds / 60),
+      });
+    } catch (error) {
+      this.logger.error('Send password reset email failed', {
+        userId: existedUser.id,
+        verificationId: result.otp.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return buildOtpResponse(
+      result.otp,
+      existedUser.email,
+      this.otpCfg.otpResendCooldownSeconds,
+    );
   }
 
   async getCurrentUser(id: string): Promise<MeResponseDto> {

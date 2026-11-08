@@ -47,3 +47,16 @@ export function safeEqualHex(a: string, b: string): boolean {
   }
   return timingSafeEqual(bufA, bufB);
 }
+
+export function buildDecoyResponse(
+  email: string,
+  expiresIn: number,
+  retryAfter: number,
+): VerificationDto {
+  return {
+    verificationId: crypto.randomUUID(),
+    maskedEmail: maskEmail(email),
+    expiresIn,
+    resendAfter: retryAfter,
+  };
+}

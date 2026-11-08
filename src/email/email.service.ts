@@ -89,4 +89,66 @@ export class EmailService {
       );
     }
   }
+
+  async sendPasswordResetCode({
+    email,
+    code,
+    verificationId,
+    expiresInMinutes,
+  }: SendVerificationCodeParams): Promise<void> {
+    if (this.driver === 'log') {
+      this.logger.log(
+        `[MAIL] to=${email} | [VERIFICATION] id=${verificationId} | [CODE] id=${code}\n`,
+      );
+      return;
+    }
+    const { error } = await this.resend.emails.send(
+      {
+        from: this.from,
+        to: [email],
+        subject: 'Reset your PrimeBank password',
+        text: [
+          `You requested a password reset for your PrimeBank account.`,
+          `Your PrimeBank verification code is: ${code}`,
+          `This code expires in ${expiresInMinutes} minutes.`,
+          'Do not share this code with anyone.',
+          'If you did not ask for this, ignore this email.',
+        ].join('\n'),
+        html: `
+          <div style="font-family: Arial, sans-serif">
+            <h2>Reset your PrimeBank password</h2>
+            <h3>If you did not ask for this, ignore this email.</h3>
+            <p>Your verification code is:</p>
+
+            <p style="
+              font-size: 32px;
+              font-weight: bold;
+              letter-spacing: 8px;
+            ">
+              ${code}
+            </p>
+
+            <p>
+              This code expires in
+              ${expiresInMinutes} minutes.
+            </p>
+
+            <p>
+              Do not share this code with anyone.
+            </p>
+            
+          </div>
+        `,
+      },
+      {
+        idempotencyKey: `reset-password/${verificationId}`,
+      },
+    );
+
+    if (error) {
+      throw new ServiceUnavailableException(
+        'Unable to send verification email',
+      );
+    }
+  }
 }
