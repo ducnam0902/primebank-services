@@ -14,6 +14,7 @@ export type IssueOtpResult =
   | { issued: true; otp: Otp; code: string }
   | {
       issued: false;
+      otp: Otp | null;
       reason: 'COOLDOWN' | 'HOURLY_LIMIT';
       retryAfterSeconds: number;
     };
@@ -109,11 +110,16 @@ export class OtpServices {
     const recent = await tx.otp.findMany({
       where: { userId, purpose, createdAt: { gte: new Date(now - 3_600_000) } },
       orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
     });
 
     const latest = recent[0] ?? null;
-
+    const usable =
+      recent.find(
+        (o) =>
+          o.consumedAt === null &&
+          o.invalidatedAt === null &&
+          o.expiresAt.getTime() > now,
+      ) ?? null;
     if (latest !== null) {
       const readyAt =
         latest.createdAt.getTime() +
@@ -121,6 +127,7 @@ export class OtpServices {
       const waitMs = readyAt - now;
       if (waitMs > 0) {
         return {
+          otp: usable,
           issued: false,
           reason: 'COOLDOWN',
           retryAfterSeconds: Math.ceil(waitMs / 1000),
@@ -131,6 +138,7 @@ export class OtpServices {
     if (recent.length >= this.otpCfg.otpMaxIssuesPerHour) {
       const freeAt = recent[recent.length - 1].createdAt.getTime() + 3_600_000;
       return {
+        otp: usable,
         issued: false,
         reason: 'HOURLY_LIMIT',
         retryAfterSeconds: Math.ceil((freeAt - now) / 1000),
