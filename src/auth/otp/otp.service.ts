@@ -186,4 +186,19 @@ export class OtpServices {
     });
     return latest?.id ?? null;
   }
+
+  async consume(otpId: string, tx: Prisma.TransactionClient): Promise<boolean> {
+    const consumed = await tx.otp.updateMany({
+      where: {
+        id: otpId,
+        consumedAt: null,
+        invalidatedAt: null,
+      },
+      data: {
+        consumedAt: new Date(),
+      },
+    });
+
+    return consumed.count === 1;
+  }
 }
