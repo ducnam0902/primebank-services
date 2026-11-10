@@ -36,6 +36,8 @@ import { VerifyEmailDto } from './dto/verifyEmail.dto';
 import type { CookieRequest } from './types/cookie-request.type';
 import { InvalidRefreshTokenException } from '@/common/exceptions/auth/invalid-refresh-token.exception';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ResetPasswordResponseDto } from './dto/reset-password-response.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -158,6 +160,21 @@ export class AuthController {
     @Body() dto: ForgotPasswordDto,
   ): Promise<VerificationDto> {
     return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password' })
+  @ApiOkResponse({ type: ResetPasswordResponseDto })
+  @Throttle({ default: { limit: 10, ttl: 900_000 } })
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<ResetPasswordResponseDto> {
+    const result = await this.authService.resetPassword(dto);
+    this.clearRefreshTokenCookie(res);
+    return result;
   }
 
   private getRefreshCookiePath(): string {

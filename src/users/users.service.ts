@@ -120,4 +120,16 @@ export class UsersService {
       lockedUntil: null,
     });
   }
+
+  async updatePassword(
+    userId: string,
+    passwordHash: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await this.usersRepository.update(
+      userId,
+      { passwordHash, lockedUntil: null, failedLoginAttempts: 0 },
+      tx,
+    );
+  }
 }

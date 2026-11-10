@@ -39,6 +39,9 @@ import { VerifyEmailResponse } from './dto/verify-email.response.dto';
 import { VerifyEmailDto } from './dto/verifyEmail.dto';
 import { IssuedTokens, TokenService } from './token/token.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { EmailSamePasswordException } from '@/common/exceptions/auth/email-same-password.exception';
+import { ResetPasswordResponseDto } from './dto/reset-password-response.dto';
 @Injectable()
 export class AuthService implements OnModuleInit {
   constructor(
@@ -184,18 +187,9 @@ export class AuthService implements OnModuleInit {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const consumed = await tx.otp.updateMany({
-        where: {
-          id: verificationId,
-          consumedAt: null,
-          invalidatedAt: null,
-        },
-        data: {
-          consumedAt: new Date(),
-        },
-      });
+      const consumed = await this.otpService.consume(verificationId, tx);
 
-      if (consumed.count === 0) {
+      if (!consumed) {
         throw new InvalidOrExpiredCode();
       }
 
@@ -399,5 +393,44 @@ export class AuthService implements OnModuleInit {
 
   async logout(rawRefreshToken: string): Promise<void> {
     return this.tokenService.revoke(rawRefreshToken);
+  }
+
+  async resetPassword(
+    dto: ResetPasswordDto,
+  ): Promise<ResetPasswordResponseDto> {
+    const { verificationId, code, newPassword } = dto;
+    const existingOtp = await this.otpService.verifyOtp(
+      verificationId,
+      OtpPurpose.PASSWORD_RESET,
+      code,
+    );
+
+    if (existingOtp.user.status !== UserStatus.ACTIVE) {
+      throw new InvalidOrExpiredCode();
+    }
+
+    if (await argon2.verify(existingOtp.user.passwordHash, newPassword)) {
+      throw new EmailSamePasswordException();
+    }
+    const newPasswordHash = await argon2.hash(newPassword, {
+      type: argon2.argon2id,
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      const consumedOtp = await this.otpService.consume(verificationId, tx);
+
+      if (!consumedOtp) {
+        throw new InvalidOrExpiredCode();
+      }
+      await this.usersService.updatePassword(
+        existingOtp.userId,
+        newPasswordHash,
+        tx,
+      );
+
+      await this.tokenService.revokeAllForUser(existingOtp.userId, tx);
+    });
+
+    return { passwordReset: true };
   }
 }
