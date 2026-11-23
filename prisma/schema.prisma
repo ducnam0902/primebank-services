@@ -63,9 +63,10 @@ model User {
   createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  customer      Customer?
-  refreshTokens RefreshToken[]
-  otps          Otp[]
+  customer             Customer?
+  refreshTokens        RefreshToken[]
+  otps                 Otp[]
+  createdLedgerEntries LedgerEntry[]
 
   @@map("users")
 }
@@ -111,7 +112,6 @@ model Account {
   currency      String        @default("VND") @db.VarChar(3)
   status        AccountStatus @default(ACTIVE)
   balance       Decimal       @default(0) @db.Decimal(19, 2)
-  version       Int           @default(0)
   createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -149,16 +149,22 @@ model Transfer {
 }
 
 model LedgerEntry {
-  id           String          @id @default(uuid()) @db.Uuid
-  accountId    String          @map("account_id") @db.Uuid
-  transferId   String?         @map("transfer_id") @db.Uuid
-  type         LedgerEntryType
-  amount       Decimal         @db.Decimal(19, 2)
-  balanceAfter Decimal         @map("balance_after") @db.Decimal(19, 2)
-  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  account      Account         @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  transfer     Transfer?       @relation(fields: [transferId], references: [id], onDelete: Restrict)
+  id             String          @id @default(uuid()) @db.Uuid
+  accountId      String          @map("account_id") @db.Uuid
+  transferId     String?         @map("transfer_id") @db.Uuid
+  type           LedgerEntryType
+  amount         Decimal         @db.Decimal(19, 2)
+  balanceAfter   Decimal         @map("balance_after") @db.Decimal(19, 2)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  account        Account         @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  transfer       Transfer?       @relation(fields: [transferId], references: [id], onDelete: Restrict)
+  description    String?         @db.VarChar(255)
+  createdById    String?         @map("created_by_id") @db.Uuid
+  idempotencyKey String?         @unique @map("idempotency_key") @db.VarChar(64)
 
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([createdById])
   @@index([accountId, createdAt])
   @@index([transferId])
   @@map("ledger_entries")
