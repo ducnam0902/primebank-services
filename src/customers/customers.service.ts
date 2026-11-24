@@ -14,4 +14,11 @@ export class CustomersService {
   ): Promise<CustomerSelected> {
     return this.customerRepository.create({ ...data }, tx);
   }
+
+  async findByUserId(
+    userId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<CustomerSelected | null> {
+    return this.customerRepository.findByUserId(userId, tx);
+  }
 }

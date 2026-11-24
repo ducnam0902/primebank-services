@@ -40,4 +40,14 @@ export class CustomerRepository {
       select: CUSTOMER_SELECT,
     });
   }
+
+  findByUserId(
+    userId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<CustomerSelected | null> {
+    return (tx ?? this.prisma).customer.findUnique({
+      where: { userId },
+      select: CUSTOMER_SELECT,
+    });
+  }
 }

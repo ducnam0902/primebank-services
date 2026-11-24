@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import { OtpServices } from './otp/otp.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { TokenService } from './token/token.service';
+import { AccountsModule } from '@/accounts/accounts.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { TokenService } from './token/token.service';
     EmailModule,
     UsersModule,
     CustomersModule,
+    AccountsModule,
     ConfigModule.forFeature(jwtConfig),
     ConfigModule.forFeature(otpConfig),
     ConfigModule.forFeature(authConfig),
