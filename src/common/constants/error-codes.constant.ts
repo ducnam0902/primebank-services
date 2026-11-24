@@ -29,6 +29,9 @@ export const ErrorCode = {
 
   // User
   USER_NOT_FOUND: 'USER_NOT_FOUND',
+
+  // Account
+  ACCOUNT_NOT_FOUND: 'ACCOUNT_NOT_FOUND',
 } as const;
 
 export type ErrorCodeType = (typeof ErrorCode)[keyof typeof ErrorCode];

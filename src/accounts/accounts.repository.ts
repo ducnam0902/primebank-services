@@ -23,4 +23,22 @@ export class AccountRepository {
       select: ACCOUNT_SELECT,
     });
   }
+
+  async findManyByUserId(userId: string): Promise<AccountSelected[]> {
+    return this.prisma.account.findMany({
+      where: { customer: { user: { id: userId } } },
+      select: ACCOUNT_SELECT,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findByIdForUser(
+    id: string,
+    userId: string,
+  ): Promise<AccountSelected | null> {
+    return this.prisma.account.findUnique({
+      where: { id, customer: { user: { id: userId } } },
+      select: ACCOUNT_SELECT,
+    });
+  }
 }
