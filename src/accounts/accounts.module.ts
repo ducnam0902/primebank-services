@@ -6,6 +6,6 @@ import { AccountRepository } from './accounts.repository';
 @Module({
   controllers: [AccountsController],
   providers: [AccountsService, AccountRepository],
-  exports: [AccountsService, AccountRepository],
+  exports: [AccountsService],
 })
 export class AccountsModule {}

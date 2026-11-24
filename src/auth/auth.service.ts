@@ -42,6 +42,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { EmailSamePasswordException } from '@/common/exceptions/auth/email-same-password.exception';
 import { ResetPasswordResponseDto } from './dto/reset-password-response.dto';
+import { AccountsService } from '@/accounts/accounts.service';
 @Injectable()
 export class AuthService implements OnModuleInit {
   constructor(
@@ -55,6 +56,7 @@ export class AuthService implements OnModuleInit {
     private readonly usersService: UsersService,
     private readonly customerService: CustomersService,
     private readonly tokenService: TokenService,
+    private readonly accountService: AccountsService,
 
     private readonly otpService: OtpServices,
     private readonly logger: Logger,
@@ -206,6 +208,16 @@ export class AuthService implements OnModuleInit {
       if (verifiedUser.count !== 1) {
         throw new InvalidOrExpiredCode();
       }
+
+      const customer = await this.customerService.findByUserId(
+        existingOtp.userId,
+        tx,
+      );
+      if (!customer) {
+        throw new InternalServerErrorException('Customer profile missing');
+      }
+
+      await this.accountService.openDefaultAccount(customer.id, tx);
 
       return {
         status: UserStatus.ACTIVE,
