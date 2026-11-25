@@ -5,7 +5,8 @@ import { withCheckDigit } from './utils/account-number.util';
 import { AccountSelected } from './accounts.select';
 import { AccountResponseDto } from './dto/account-response.dto';
 import { AccountNotFound } from '@/common/exceptions/account/account-not-found.exception';
-import { toAccountResponse } from './utils/accounts.mapper';
+import { toAccountResponse, toBankAccountName } from './utils/accounts.mapper';
+import { AccountLookupResponseDto } from './dto/account-lookup-response.dto';
 
 @Injectable()
 export class AccountsService {
@@ -45,5 +46,20 @@ export class AccountsService {
     }
 
     return toAccountResponse(account);
+  }
+
+  async lookupAccount(
+    accountNumber: string,
+  ): Promise<AccountLookupResponseDto> {
+    const account =
+      await this.accountRepository.findByAccountNumber(accountNumber);
+    if (!account || account.status !== AccountStatus.ACTIVE) {
+      throw new AccountNotFound();
+    }
+
+    return {
+      accountNumber: account.accountNumber,
+      accountName: toBankAccountName(account.customer.fullName),
+    };
   }
 }

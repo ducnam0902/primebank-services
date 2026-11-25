@@ -14,3 +14,14 @@ export function toAccountResponse(
     createdAt: account.createdAt,
   };
 }
+
+export function toBankAccountName(fullName: string): string {
+  return fullName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toUpperCase()
+    .trim()
+    .replace(/\s+/g, ' ');
+}
