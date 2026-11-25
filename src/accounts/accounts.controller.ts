@@ -6,6 +6,9 @@ import { AccountsService } from './accounts.service';
 import { ApiSuccessResponse } from '@/common/decorators/api-success-response.decorator';
 import { Roles } from '@/auth/decorators/roles.decorator';
 import { Role } from '@/generated/prisma/enums';
+import { AccountLookupResponseDto } from './dto/account-lookup-response.dto';
+import { LookupAccountParamsDto } from './dto/lookup-account-params.dto';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('accounts')
 export class AccountsController {
@@ -32,5 +35,17 @@ export class AccountsController {
     @CurrentUser('id') userId: string,
   ): Promise<AccountResponseDto> {
     return this.accountsService.getCustomerAccountById(id, userId);
+  }
+
+  @Get('lookup/:accountNumber')
+  @ApiOperation({ summary: 'Lookup account by number' })
+  @ApiSuccessResponse(AccountLookupResponseDto)
+  @ApiBearerAuth('access-token')
+  @Roles(Role.CUSTOMER)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  lookupAccount(
+    @Param() { accountNumber }: LookupAccountParamsDto,
+  ): Promise<AccountLookupResponseDto> {
+    return this.accountsService.lookupAccount(accountNumber);
   }
 }

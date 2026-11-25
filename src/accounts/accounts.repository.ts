@@ -1,7 +1,12 @@
 import { PrismaService } from '@/database/prisma.service';
 import { Prisma } from '@/generated/prisma/client';
 import { Injectable } from '@nestjs/common';
-import { ACCOUNT_SELECT, AccountSelected } from './accounts.select';
+import {
+  ACCOUNT_LOOKUP_SELECT,
+  ACCOUNT_SELECT,
+  AccountLookupSelected,
+  AccountSelected,
+} from './accounts.select';
 import { CreateAccountDto } from './dto/create-account.dto';
 
 @Injectable()
@@ -39,6 +44,15 @@ export class AccountRepository {
     return this.prisma.account.findUnique({
       where: { id, customer: { user: { id: userId } } },
       select: ACCOUNT_SELECT,
+    });
+  }
+
+  async findByAccountNumber(
+    accountNumber: string,
+  ): Promise<AccountLookupSelected | null> {
+    return this.prisma.account.findUnique({
+      where: { accountNumber },
+      select: ACCOUNT_LOOKUP_SELECT,
     });
   }
 }
